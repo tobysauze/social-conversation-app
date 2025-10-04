@@ -62,10 +62,13 @@ app.use((err, req, res, next) => {
 
 // Health check endpoint for Railway
 app.get('/api/health', (req, res) => {
+  console.log('Health check requested');
   res.status(200).json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    port: PORT,
+    nodeEnv: process.env.NODE_ENV
   });
 });
 
@@ -76,9 +79,10 @@ app.use('*', (req, res) => {
 
 // Initialize database and start server
 initDatabase().then(() => {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📝 Social Conversation App API ready!`);
+    console.log(`🌐 Health check available at: http://0.0.0.0:${PORT}/api/health`);
   });
 }).catch(err => {
   console.error('Failed to initialize database:', err);
