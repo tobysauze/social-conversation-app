@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  password   String    @map("password_hash")
+  name       String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  journalEntries JournalEntry[]
+  stories        Story[]
+  people         Person[]
+  jokes          Joke[]
+}
+
+model JournalEntry {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  content   String
+  mood      String?
+  tags      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id])
+  stories   Story[]
+}
+
+model Story {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @map("user_id")
+  journalEntryId  Int?      @map("journal_entry_id")
+  title           String
+  content         String
+  tone            String
+  durationSeconds Int       @default(30) @map("duration_seconds")
+  tags            String?
+  timesTold       Int       @default(0) @map("times_told")
+  successRating   Int?      @map("success_rating")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+  user            User      @relation(fields: [userId], references: [id])
+  journalEntry    JournalEntry? @relation(fields: [journalEntryId], references: [id])
+}
+
+model PracticeSession {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  storyId   Int?     @map("story_id")
+  sessionType String @map("session_type")
+  feedback  String?
+  rating    Int?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
+  story     Story?   @relation(fields: [storyId], references: [id])
+}
+
+model ConversationStarter {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  storyId   Int?     @map("story_id")
+  question  String
+  context   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
+  story     Story?   @relation(fields: [storyId], references: [id])
+}
+
+model Person {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @map("user_id")
+  name                String
+  relationship        String?
+  howMet              String?  @map("how_met")
+  interests           String?
+  personalityTraits   String?  @map("personality_traits")
+  conversationStyle   String?  @map("conversation_style")
+  sharedExperiences   String?  @map("shared_experiences")
+  storyPreferences    String?  @map("story_preferences")
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  user                User     @relation(fields: [userId], references: [id])
+}
+
+model Joke {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  title        String
+  content      String
+  category     String?
+  difficulty   String?
+  timesTold    Int      @default(0) @map("times_told")
+  successRating Int?    @map("success_rating")
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+

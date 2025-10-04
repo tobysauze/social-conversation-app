@@ -10,7 +10,14 @@ const storyRoutes = require('./routes/stories');
 const practiceRoutes = require('./routes/practice');
 const peopleRoutes = require('./routes/people');
 const jokesRoutes = require('./routes/jokes');
-const { initDatabase } = require('./database/init');
+// Prisma client (Postgres)
+let prisma = null;
+try {
+  const { PrismaClient } = require('@prisma/client');
+  prisma = new PrismaClient();
+} catch (e) {
+  console.warn('Prisma not initialized yet (likely before migration).');
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -106,12 +113,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Social Conversation App API ready!`);
   console.log(`🌐 Health check available at: http://0.0.0.0:${PORT}/api/health`);
-  
-  // Initialize database in background
-  initDatabase().then(() => {
-    console.log('✅ Database initialized successfully');
-  }).catch(err => {
-    console.error('⚠️ Database initialization failed:', err);
-    // Don't exit - let the server continue running
-  });
+  if (prisma) {
+    console.log('✅ Prisma ready for Postgres');
+  } else {
+    console.log('ℹ️ Using legacy SQLite until Prisma is configured.');
+  }
 });
