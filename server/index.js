@@ -77,14 +77,17 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Initialize database and start server
-initDatabase().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📝 Social Conversation App API ready!`);
-    console.log(`🌐 Health check available at: http://0.0.0.0:${PORT}/api/health`);
+// Start server immediately, initialize database in background
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📝 Social Conversation App API ready!`);
+  console.log(`🌐 Health check available at: http://0.0.0.0:${PORT}/api/health`);
+  
+  // Initialize database in background
+  initDatabase().then(() => {
+    console.log('✅ Database initialized successfully');
+  }).catch(err => {
+    console.error('⚠️ Database initialization failed:', err);
+    // Don't exit - let the server continue running
   });
-}).catch(err => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
 });

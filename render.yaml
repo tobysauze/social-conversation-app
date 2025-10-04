@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: social-conversation-backend
+    env: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        value: your-super-secret-jwt-key-here-make-it-long-and-random-12345
+      - key: FRONTEND_URL
+        value: https://your-app.vercel.app
