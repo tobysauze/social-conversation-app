@@ -27,12 +27,36 @@ app.use(helmet());
 // app.use(limiter);
 
 // CORS configuration
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://your-app.vercel.app'] 
-    : ['http://localhost:3000'],
-  credentials: true
-}));
+const allowedOriginRegexes = [
+  /https?:\/\/.*\.vercel\.app$/i,
+  /https?:\/\/localhost(:\d+)?$/i
+];
+
+const corsOptions = {
+  credentials: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    // Always allow explicit FRONTEND_URL if provided
+    if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
+      return callback(null, true);
+    }
+
+    // Allow common dev URL
+    if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:3000')) {
+      return callback(null, true);
+    }
+
+    // Allow any *.vercel.app domain
+    const isAllowed = allowedOriginRegexes.some((re) => re.test(origin));
+    if (isAllowed) return callback(null, true);
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  }
+};
+
+app.use(cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
