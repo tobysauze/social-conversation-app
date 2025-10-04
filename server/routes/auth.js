@@ -31,32 +31,29 @@ router.post('/register', async (req, res) => {
       const saltRounds = 12;
       const passwordHash = await bcrypt.hash(password, saltRounds);
 
-      db.run(
-        'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)',
-        [email, passwordHash, name],
-        function(err) {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to create user' });
+      try {
+        const stmt = db.prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)');
+        const result = stmt.run(email, passwordHash, name);
+        
+        // Generate JWT token
+        const token = jwt.sign(
+          { userId: result.lastInsertRowid, email },
+          process.env.JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
+        res.status(201).json({
+          message: 'User created successfully',
+          token,
+          user: {
+            id: result.lastInsertRowid,
+            email,
+            name
           }
-
-          // Generate JWT token
-          const token = jwt.sign(
-            { userId: this.lastID, email },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-          );
-
-          res.status(201).json({
-            message: 'User created successfully',
-            token,
-            user: {
-              id: this.lastID,
-              email,
-              name
-            }
-          });
-        }
-      );
+        });
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to create user' });
+      }
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -75,13 +72,9 @@ router.post('/login', async (req, res) => {
 
     const db = getDatabase();
     
-    db.get(
-      'SELECT id, email, password_hash, name FROM users WHERE name = ?',
-      [username],
-      async (err, user) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+      try {
+        const stmt = db.prepare('SELECT id, email, password_hash, name FROM users WHERE name = ?');
+        const user = stmt.get(username);
 
         if (!user) {
           return res.status(401).json({ error: 'Invalid credentials' });
@@ -108,8 +101,9 @@ router.post('/login', async (req, res) => {
             name: user.name
           }
         });
+      } catch (err) {
+        return res.status(500).json({ error: 'Database error' });
       }
-    );
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -120,21 +114,18 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, (req, res) => {
   const db = getDatabase();
   
-  db.get(
-    'SELECT id, email, name, created_at FROM users WHERE id = ?',
-    [req.user.userId],
-    (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+  try {
+    const stmt = db.prepare('SELECT id, email, name, created_at FROM users WHERE id = ?');
+    const user = stmt.get(req.user.userId);
 
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      res.json({ user });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
-  );
+
+    res.json({ user });
+  } catch (err) {
+    return res.status(500).json({ error: 'Database error' });
+  }
 });
 
 module.exports = router;
