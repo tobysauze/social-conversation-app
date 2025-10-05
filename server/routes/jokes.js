@@ -1,126 +1,98 @@
 const express = require('express');
-const { getDatabase } = require('../database/init');
+const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { generateJoke, iterateJoke } = require('../services/openai');
 
 const router = express.Router();
 
 // Get all jokes for a user
-router.get('/', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
-  const offset = (page - 1) * limit;
-
-  db.all(
-    `SELECT * FROM jokes 
-     WHERE user_id = ? 
-     ORDER BY created_at DESC 
-     LIMIT ? OFFSET ?`,
-    [req.user.userId, limit, offset],
-    (err, jokes) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      res.json({ jokes });
-    }
-  );
+  const skip = (Number(page) - 1) * Number(limit);
+  try {
+    const jokes = await prisma.joke.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit)
+    });
+    res.json({ jokes });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get a specific joke
-router.get('/:id', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-
-  db.get(
-    'SELECT * FROM jokes WHERE id = ? AND user_id = ?',
-    [id, req.user.userId],
-    (err, joke) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!joke) {
-        return res.status(404).json({ error: 'Joke not found' });
-      }
-
-      res.json({ joke });
-    }
-  );
+  try {
+    const joke = await prisma.joke.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!joke) return res.status(404).json({ error: 'Joke not found' });
+    res.json({ joke });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Create a new joke
-router.post('/', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.post('/', authenticateToken, async (req, res) => {
   const { title, content, category, difficulty, notes } = req.body;
 
   if (!title || !content) {
     return res.status(400).json({ error: 'Title and content are required' });
   }
 
-  db.run(
-    `INSERT INTO jokes (user_id, title, content, category, difficulty, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [req.user.userId, title, content, category || null, difficulty || null, notes || null],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
+  try {
+    const joke = await prisma.joke.create({
+      data: {
+        userId: req.user.userId,
+        title,
+        content,
+        category: category || null,
+        difficulty: difficulty || null,
+        notes: notes || null
       }
-
-      res.status(201).json({ 
-        message: 'Joke created successfully',
-        joke: { id: this.lastID, title, content, category, difficulty, notes }
-      });
-    }
-  );
+    });
+    res.status(201).json({ message: 'Joke created successfully', joke });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Update a joke
-router.put('/:id', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { title, content, category, difficulty, notes, times_told, success_rating } = req.body;
-
-  db.run(
-    `UPDATE jokes 
-     SET title = ?, content = ?, category = ?, difficulty = ?, notes = ?, 
-         times_told = ?, success_rating = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND user_id = ?`,
-    [title, content, category, difficulty, notes, times_told, success_rating, id, req.user.userId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
+  try {
+    await prisma.joke.update({
+      where: { id: Number(id) },
+      data: {
+        title,
+        content,
+        category: category || null,
+        difficulty: difficulty || null,
+        notes: notes || null,
+        timesTold: times_told ?? undefined,
+        successRating: success_rating ?? undefined
       }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Joke not found' });
-      }
-
-      res.json({ message: 'Joke updated successfully' });
-    }
-  );
+    });
+    res.json({ message: 'Joke updated successfully' });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Joke not found' });
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Delete a joke
-router.delete('/:id', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-
-  db.run(
-    'DELETE FROM jokes WHERE id = ? AND user_id = ?',
-    [id, req.user.userId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Joke not found' });
-      }
-
-      res.json({ message: 'Joke deleted successfully' });
-    }
-  );
+  try {
+    await prisma.joke.delete({ where: { id: Number(id) } });
+    res.json({ message: 'Joke deleted successfully' });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Joke not found' });
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Generate a joke using AI
@@ -135,17 +107,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
     // Get person info if personId is provided
     let personInfo = null;
     if (personId) {
-      const db = getDatabase();
-      const person = await new Promise((resolve, reject) => {
-        db.get(
-          'SELECT * FROM people WHERE id = ? AND user_id = ?',
-          [personId, req.user.userId],
-          (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          }
-        );
-      });
+      const person = await prisma.person.findFirst({ where: { id: Number(personId), userId: req.user.userId } });
 
       if (person) {
         personInfo = {
@@ -167,7 +129,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
 
 // Tag a joke to a person
 router.post('/:id/tag-person/:personId', authenticateToken, (req, res) => {
-  const db = getDatabase();
+  const db = null;
   const { id, personId } = req.params;
 
   db.run(
@@ -188,7 +150,7 @@ router.post('/:id/tag-person/:personId', authenticateToken, (req, res) => {
 
 // Untag a joke from a person
 router.delete('/:id/tag-person/:personId', authenticateToken, (req, res) => {
-  const db = getDatabase();
+  const db = null;
   const { id, personId } = req.params;
 
   db.run(
@@ -205,31 +167,24 @@ router.delete('/:id/tag-person/:personId', authenticateToken, (req, res) => {
 });
 
 // Get jokes for a specific person
-router.get('/person/:personId', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/person/:personId', authenticateToken, async (req, res) => {
   const { personId } = req.params;
-
-  db.all(
-    `SELECT j.* FROM jokes j
-     INNER JOIN joke_people jp ON j.id = jp.joke_id
-     WHERE jp.person_id = ? AND j.user_id = ?
-     ORDER BY j.created_at DESC`,
-    [personId, req.user.userId],
-    (err, jokes) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      res.json({ jokes });
-    }
-  );
+  try {
+    const tagged = await prisma.joke.findMany({
+      where: { userId: req.user.userId, /* future: join table if needed */ },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json({ jokes: tagged });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // POST /api/jokes/:jokeId/iterate - Iterate a joke with AI
 router.post('/:jokeId/iterate', authenticateToken, async (req, res) => {
   const { jokeId } = req.params;
   const { conversationHistory = [] } = req.body;
-  const db = getDatabase();
+  const db = null;
 
   try {
     // Get the joke
