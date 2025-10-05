@@ -351,83 +351,50 @@ router.post('/analyze-journal', authenticateToken, async (req, res) => {
 });
 
 // Apply insights to a person's profile
-router.post('/:id/apply-insights', authenticateToken, (req, res) => {
+router.post('/:id/apply-insights', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { insights } = req.body;
-
-  console.log('Applying insights to person:', id, 'Insights:', insights);
 
   if (!insights) {
     return res.status(400).json({ error: 'Insights are required' });
   }
 
-  const db = getDatabase();
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
 
-  // Get current person data
-  db.get(
-    'SELECT * FROM people WHERE id = ? AND user_id = ?',
-    [id, req.user.userId],
-    (err, person) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
+    const currentInterests = person.interests ? JSON.parse(person.interests) : [];
+    const currentTraits = person.personalityTraits ? JSON.parse(person.personalityTraits) : [];
+    const currentPreferences = person.storyPreferences ? JSON.parse(person.storyPreferences) : [];
+
+    const updatedInterests = Array.from(new Set([...currentInterests, ...(insights.interests || [])]));
+    const updatedTraits = Array.from(new Set([...currentTraits, ...(insights.personality_traits || [])]));
+    const updatedPreferences = Array.from(new Set([...currentPreferences, ...(insights.preferences || [])]));
+
+    const updatedConversationStyle = insights.conversation_style || person.conversationStyle || null;
+    const newNotesPart = insights.observations || '';
+    const updatedNotes = newNotesPart
+      ? ((person.notes || '') ? `${person.notes}\n\n${newNotesPart}` : newNotesPart)
+      : person.notes || null;
+
+    await prisma.person.update({
+      where: { id: Number(id) },
+      data: {
+        interests: JSON.stringify(updatedInterests),
+        personalityTraits: JSON.stringify(updatedTraits),
+        storyPreferences: JSON.stringify(updatedPreferences),
+        conversationStyle: updatedConversationStyle,
+        notes: updatedNotes
       }
+    });
 
-      if (!person) {
-        return res.status(404).json({ error: 'Person not found' });
-      }
-
-      // Parse current data
-      const currentInterests = person.interests ? JSON.parse(person.interests) : [];
-      const currentTraits = person.personality_traits ? JSON.parse(person.personality_traits) : [];
-      const currentPreferences = person.story_preferences ? JSON.parse(person.story_preferences) : [];
-
-      // Merge new insights with existing data
-      const updatedInterests = [...new Set([...currentInterests, ...(insights.interests || [])])];
-      const updatedTraits = [...new Set([...currentTraits, ...(insights.personality_traits || [])])];
-      const updatedPreferences = [...new Set([...currentPreferences, ...(insights.preferences || [])])];
-
-      // Update conversation style if provided
-      const updatedConversationStyle = insights.conversation_style || person.conversation_style;
-
-      // Update person
-      db.run(
-        `UPDATE people SET 
-          interests = ?, 
-          personality_traits = ?, 
-          story_preferences = ?,
-          conversation_style = ?,
-          notes = CASE 
-            WHEN notes IS NULL OR notes = '' THEN ?
-            ELSE notes || '\n\n' || ?
-          END,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND user_id = ?`,
-        [
-          JSON.stringify(updatedInterests),
-          JSON.stringify(updatedTraits),
-          JSON.stringify(updatedPreferences),
-          updatedConversationStyle,
-          insights.observations || '',
-          insights.observations || '',
-          id,
-          req.user.userId
-        ],
-        function(err) {
-          if (err) {
-            console.error('Database error updating person:', err);
-            return res.status(500).json({ error: 'Failed to update person: ' + err.message });
-          }
-
-          if (this.changes === 0) {
-            return res.status(404).json({ error: 'Person not found' });
-          }
-
-          console.log('Successfully applied insights to person:', id);
-          res.json({ message: 'Insights applied successfully' });
-        }
-      );
-    }
-  );
+    res.json({ message: 'Insights applied successfully' });
+  } catch (e) {
+    console.error('Error applying insights:', e);
+    res.status(500).json({ error: 'Failed to apply insights' });
+  }
 });
 
 module.exports = router;
