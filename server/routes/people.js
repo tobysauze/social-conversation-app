@@ -16,7 +16,22 @@ router.get('/', authenticateToken, async (req, res) => {
       skip,
       take: Number(limit)
     });
-    res.json({ people });
+    const legacy = people.map(p => ({
+      id: p.id,
+      user_id: p.userId,
+      name: p.name,
+      relationship: p.relationship,
+      how_met: p.howMet,
+      interests: p.interests,
+      personality_traits: p.personalityTraits,
+      conversation_style: p.conversationStyle,
+      shared_experiences: p.sharedExperiences,
+      story_preferences: p.storyPreferences,
+      notes: p.notes,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt
+    }));
+    res.json({ people: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -30,7 +45,22 @@ router.get('/:id', authenticateToken, async (req, res) => {
       where: { id: Number(id), userId: req.user.userId }
     });
     if (!person) return res.status(404).json({ error: 'Person not found' });
-    res.json({ person });
+    const legacy = {
+      id: person.id,
+      user_id: person.userId,
+      name: person.name,
+      relationship: person.relationship,
+      how_met: person.howMet,
+      interests: person.interests,
+      personality_traits: person.personalityTraits,
+      conversation_style: person.conversationStyle,
+      shared_experiences: person.sharedExperiences,
+      story_preferences: person.storyPreferences,
+      notes: person.notes,
+      created_at: person.createdAt,
+      updated_at: person.updatedAt
+    };
+    res.json({ person: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -69,7 +99,22 @@ router.post('/', authenticateToken, async (req, res) => {
         notes: notes || null
       }
     });
-    res.status(201).json({ person });
+    const legacy = {
+      id: person.id,
+      user_id: person.userId,
+      name: person.name,
+      relationship: person.relationship,
+      how_met: person.howMet,
+      interests: person.interests,
+      personality_traits: person.personalityTraits,
+      conversation_style: person.conversationStyle,
+      shared_experiences: person.sharedExperiences,
+      story_preferences: person.storyPreferences,
+      notes: person.notes,
+      created_at: person.createdAt,
+      updated_at: person.updatedAt
+    };
+    res.status(201).json({ person: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Failed to create person' });
   }
@@ -109,7 +154,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
         notes: notes || null
       }
     });
-    res.json({ person });
+    const legacy = {
+      id: person.id,
+      user_id: person.userId,
+      name: person.name,
+      relationship: person.relationship,
+      how_met: person.howMet,
+      interests: person.interests,
+      personality_traits: person.personalityTraits,
+      conversation_style: person.conversationStyle,
+      shared_experiences: person.sharedExperiences,
+      story_preferences: person.storyPreferences,
+      notes: person.notes,
+      created_at: person.createdAt,
+      updated_at: person.updatedAt
+    };
+    res.json({ person: legacy });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Person not found' });
     res.status(500).json({ error: 'Failed to update person' });

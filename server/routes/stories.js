@@ -16,7 +16,21 @@ router.get('/', authenticateToken, async (req, res) => {
       skip,
       take: Number(limit)
     });
-    res.json({ stories });
+    const legacy = stories.map(s => ({
+      id: s.id,
+      user_id: s.userId,
+      journal_entry_id: s.journalEntryId,
+      title: s.title,
+      content: s.content,
+      tone: s.tone,
+      duration_seconds: s.durationSeconds,
+      tags: s.tags,
+      times_told: s.timesTold,
+      success_rating: s.successRating,
+      created_at: s.createdAt,
+      updated_at: s.updatedAt
+    }));
+    res.json({ stories: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -28,7 +42,21 @@ router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
     if (!story) return res.status(404).json({ error: 'Story not found' });
-    res.json({ story });
+    const legacy = {
+      id: story.id,
+      user_id: story.userId,
+      journal_entry_id: story.journalEntryId,
+      title: story.title,
+      content: story.content,
+      tone: story.tone,
+      duration_seconds: story.durationSeconds,
+      tags: story.tags,
+      times_told: story.timesTold,
+      success_rating: story.successRating,
+      created_at: story.createdAt,
+      updated_at: story.updatedAt
+    };
+    res.json({ story: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -97,7 +125,21 @@ router.post('/', authenticateToken, async (req, res) => {
           tags: tags ? JSON.stringify(tags) : null
         }
       });
-      res.status(201).json({ story });
+      const legacy = {
+        id: story.id,
+        user_id: story.userId,
+        journal_entry_id: story.journalEntryId,
+        title: story.title,
+        content: story.content,
+        tone: story.tone,
+        duration_seconds: story.durationSeconds,
+        tags: story.tags,
+        times_told: story.timesTold,
+        success_rating: story.successRating,
+        created_at: story.createdAt,
+        updated_at: story.updatedAt
+      };
+      res.status(201).json({ story: legacy });
     } catch (e) {
       res.status(500).json({ error: 'Failed to create story' });
     }

@@ -15,7 +15,15 @@ router.get('/', authenticateToken, async (req, res) => {
       skip,
       take: Number(limit)
     });
-    res.json({ entries });
+    const legacy = entries.map(e => ({
+      id: e.id,
+      content: e.content,
+      mood: e.mood,
+      tags: e.tags,
+      created_at: e.createdAt,
+      updated_at: e.updatedAt
+    }));
+    res.json({ entries: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -29,7 +37,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
       where: { id: Number(id), userId: req.user.userId }
     });
     if (!entry) return res.status(404).json({ error: 'Journal entry not found' });
-    res.json({ entry });
+    res.json({ entry: {
+      id: entry.id,
+      content: entry.content,
+      mood: entry.mood,
+      tags: entry.tags,
+      created_at: entry.createdAt,
+      updated_at: entry.updatedAt
+    } });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -52,7 +67,14 @@ router.post('/', authenticateToken, async (req, res) => {
         tags: tags ? JSON.stringify(tags) : null
       }
     });
-    res.status(201).json({ entry });
+    res.status(201).json({ entry: {
+      id: entry.id,
+      content: entry.content,
+      mood: entry.mood,
+      tags: entry.tags,
+      created_at: entry.createdAt,
+      updated_at: entry.updatedAt
+    } });
   } catch (e) {
     res.status(500).json({ error: 'Failed to create journal entry' });
   }
@@ -76,7 +98,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
         tags: tags ? JSON.stringify(tags) : null
       }
     });
-    res.json({ entry });
+    res.json({ entry: {
+      id: entry.id,
+      content: entry.content,
+      mood: entry.mood,
+      tags: entry.tags,
+      created_at: entry.createdAt,
+      updated_at: entry.updatedAt
+    } });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Journal entry not found' });
     res.status(500).json({ error: 'Failed to update journal entry' });
@@ -106,7 +135,14 @@ router.get('/date-range/:start/:end', authenticateToken, async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    res.json({ entries });
+    const legacy = entries.map(e => ({
+      id: e.id,
+      content: e.content,
+      mood: e.mood,
+      tags: e.tags,
+      created_at: e.createdAt
+    }));
+    res.json({ entries: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
