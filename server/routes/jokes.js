@@ -16,7 +16,20 @@ router.get('/', authenticateToken, async (req, res) => {
       skip,
       take: Number(limit)
     });
-    res.json({ jokes });
+    const legacy = jokes.map(j => ({
+      id: j.id,
+      user_id: j.userId,
+      title: j.title,
+      content: j.content,
+      category: j.category,
+      difficulty: j.difficulty,
+      times_told: j.timesTold,
+      success_rating: j.successRating,
+      notes: j.notes,
+      created_at: j.createdAt,
+      updated_at: j.updatedAt
+    }));
+    res.json({ jokes: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -28,7 +41,20 @@ router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const joke = await prisma.joke.findFirst({ where: { id: Number(id), userId: req.user.userId } });
     if (!joke) return res.status(404).json({ error: 'Joke not found' });
-    res.json({ joke });
+    const legacy = {
+      id: joke.id,
+      user_id: joke.userId,
+      title: joke.title,
+      content: joke.content,
+      category: joke.category,
+      difficulty: joke.difficulty,
+      times_told: joke.timesTold,
+      success_rating: joke.successRating,
+      notes: joke.notes,
+      created_at: joke.createdAt,
+      updated_at: joke.updatedAt
+    };
+    res.json({ joke: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -53,7 +79,20 @@ router.post('/', authenticateToken, async (req, res) => {
         notes: notes || null
       }
     });
-    res.status(201).json({ message: 'Joke created successfully', joke });
+    const legacy = {
+      id: joke.id,
+      user_id: joke.userId,
+      title: joke.title,
+      content: joke.content,
+      category: joke.category,
+      difficulty: joke.difficulty,
+      times_told: joke.timesTold,
+      success_rating: joke.successRating,
+      notes: joke.notes,
+      created_at: joke.createdAt,
+      updated_at: joke.updatedAt
+    };
+    res.status(201).json({ message: 'Joke created successfully', joke: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
