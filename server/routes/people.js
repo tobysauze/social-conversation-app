@@ -22,11 +22,11 @@ router.get('/', authenticateToken, async (req, res) => {
       name: p.name,
       relationship: p.relationship,
       how_met: p.howMet,
-      interests: p.interests,
-      personality_traits: p.personalityTraits,
+      interests: p.interests ? JSON.parse(p.interests) : [],
+      personality_traits: p.personalityTraits ? JSON.parse(p.personalityTraits) : [],
       conversation_style: p.conversationStyle,
-      shared_experiences: p.sharedExperiences,
-      story_preferences: p.storyPreferences,
+      shared_experiences: p.sharedExperiences ? JSON.parse(p.sharedExperiences) : [],
+      story_preferences: p.storyPreferences ? JSON.parse(p.storyPreferences) : [],
       notes: p.notes,
       created_at: p.createdAt,
       updated_at: p.updatedAt
@@ -51,11 +51,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
       name: person.name,
       relationship: person.relationship,
       how_met: person.howMet,
-      interests: person.interests,
-      personality_traits: person.personalityTraits,
+      interests: person.interests ? JSON.parse(person.interests) : [],
+      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
       conversation_style: person.conversationStyle,
-      shared_experiences: person.sharedExperiences,
-      story_preferences: person.storyPreferences,
+      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
+      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
       notes: person.notes,
       created_at: person.createdAt,
       updated_at: person.updatedAt
@@ -105,11 +105,11 @@ router.post('/', authenticateToken, async (req, res) => {
       name: person.name,
       relationship: person.relationship,
       how_met: person.howMet,
-      interests: person.interests,
-      personality_traits: person.personalityTraits,
+      interests: person.interests ? JSON.parse(person.interests) : [],
+      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
       conversation_style: person.conversationStyle,
-      shared_experiences: person.sharedExperiences,
-      story_preferences: person.storyPreferences,
+      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
+      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
       notes: person.notes,
       created_at: person.createdAt,
       updated_at: person.updatedAt
@@ -328,43 +328,22 @@ router.post('/analyze-journal', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Journal content is required' });
     }
 
-    const db = getDatabase();
+    // Pull existing people via Prisma
+    const existingPeople = await prisma.person.findMany({ where: { userId: req.user.userId } });
 
-    // Get existing people for this user
-    db.all(
-      'SELECT * FROM people WHERE user_id = ?',
-      [req.user.userId],
-      async (err, existingPeople) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+    const parsedPeople = existingPeople.map(person => ({
+      id: person.id,
+      name: person.name,
+      interests: person.interests ? JSON.parse(person.interests) : [],
+      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
+      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
+      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
+      conversation_style: person.conversationStyle || null,
+      relationship: person.relationship || null
+    }));
 
-        if (!existingPeople) { // Handle case where no people exist
-          existingPeople = [];
-        }
-
-        console.log('Existing people for user:', existingPeople);
-
-        try {
-          // Parse existing people data
-          const parsedPeople = existingPeople.map(person => ({
-            ...person,
-            interests: person.interests ? JSON.parse(person.interests) : [],
-            personality_traits: person.personality_traits ? JSON.parse(person.personality_traits) : [],
-            shared_experiences: person.shared_experiences ? JSON.parse(person.shared_experiences) : [],
-            story_preferences: person.story_preferences ? JSON.parse(person.story_preferences) : []
-          }));
-
-          // Analyze journal for people insights
-          const insights = await analyzeJournalForPeopleInsights(journalContent, parsedPeople);
-          console.log('AI returned insights:', insights);
-          res.json({ insights: insights.people_insights });
-        } catch (error) {
-          console.error('Error analyzing journal:', error);
-          res.status(500).json({ error: 'Failed to analyze journal entry' });
-        }
-      }
-    );
+    const insights = await analyzeJournalForPeopleInsights(journalContent, parsedPeople);
+    res.json({ insights: insights.people_insights });
   } catch (error) {
     console.error('Journal analysis error:', error);
     res.status(500).json({ error: 'Internal server error' });
