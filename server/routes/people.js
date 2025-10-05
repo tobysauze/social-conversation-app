@@ -1,74 +1,43 @@
 const express = require('express');
-const { getDatabase } = require('../database/init');
+const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { getStoryRecommendations, analyzeJournalForPeopleInsights } = require('../services/openai');
 
 const router = express.Router();
 
 // Get all people for a user
-router.get('/', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
-  const offset = (page - 1) * limit;
-
-  db.all(
-    `SELECT * FROM people 
-     WHERE user_id = ? 
-     ORDER BY created_at DESC 
-     LIMIT ? OFFSET ?`,
-    [req.user.userId, limit, offset],
-    (err, people) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      // Parse JSON fields
-      const parsedPeople = people.map(person => ({
-        ...person,
-        interests: person.interests ? JSON.parse(person.interests) : [],
-        personality_traits: person.personality_traits ? JSON.parse(person.personality_traits) : [],
-        shared_experiences: person.shared_experiences ? JSON.parse(person.shared_experiences) : [],
-        story_preferences: person.story_preferences ? JSON.parse(person.story_preferences) : []
-      }));
-      
-      res.json({ people: parsedPeople });
-    }
-  );
+  const skip = (Number(page) - 1) * Number(limit);
+  try {
+    const people = await prisma.person.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit)
+    });
+    res.json({ people });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get a specific person
-router.get('/:id', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-
-  db.get(
-    'SELECT * FROM people WHERE id = ? AND user_id = ?',
-    [id, req.user.userId],
-    (err, person) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!person) {
-        return res.status(404).json({ error: 'Person not found' });
-      }
-
-      // Parse JSON fields
-      const parsedPerson = {
-        ...person,
-        interests: person.interests ? JSON.parse(person.interests) : [],
-        personality_traits: person.personality_traits ? JSON.parse(person.personality_traits) : [],
-        shared_experiences: person.shared_experiences ? JSON.parse(person.shared_experiences) : [],
-        story_preferences: person.story_preferences ? JSON.parse(person.story_preferences) : []
-      };
-
-      res.json({ person: parsedPerson });
-    }
-  );
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+    res.json({ person });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Create a new person
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   const {
     name,
     relationship,
@@ -85,58 +54,29 @@ router.post('/', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Name is required' });
   }
 
-  const db = getDatabase();
-
-  db.run(
-    `INSERT INTO people (
-      user_id, name, relationship, how_met, interests, 
-      personality_traits, conversation_style, shared_experiences, 
-      story_preferences, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      req.user.userId,
-      name,
-      relationship,
-      how_met,
-      JSON.stringify(interests),
-      JSON.stringify(personality_traits),
-      conversation_style,
-      JSON.stringify(shared_experiences),
-      JSON.stringify(story_preferences),
-      notes
-    ],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to create person' });
+  try {
+    const person = await prisma.person.create({
+      data: {
+        userId: req.user.userId,
+        name,
+        relationship: relationship || null,
+        howMet: how_met || null,
+        interests: JSON.stringify(interests || []),
+        personalityTraits: JSON.stringify(personality_traits || []),
+        conversationStyle: conversation_style || null,
+        sharedExperiences: JSON.stringify(shared_experiences || []),
+        storyPreferences: JSON.stringify(story_preferences || []),
+        notes: notes || null
       }
-
-      // Return the created person
-      db.get(
-        'SELECT * FROM people WHERE id = ?',
-        [this.lastID],
-        (err, person) => {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to retrieve created person' });
-          }
-          
-          // Parse JSON fields
-          const parsedPerson = {
-            ...person,
-            interests: person.interests ? JSON.parse(person.interests) : [],
-            personality_traits: person.personality_traits ? JSON.parse(person.personality_traits) : [],
-            shared_experiences: person.shared_experiences ? JSON.parse(person.shared_experiences) : [],
-            story_preferences: person.story_preferences ? JSON.parse(person.story_preferences) : []
-          };
-          
-          res.status(201).json({ person: parsedPerson });
-        }
-      );
-    }
-  );
+    });
+    res.status(201).json({ person });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to create person' });
+  }
 });
 
 // Update a person
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const {
     name,
@@ -154,81 +94,38 @@ router.put('/:id', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Name is required' });
   }
 
-  const db = getDatabase();
-
-  db.run(
-    `UPDATE people SET 
-      name = ?, relationship = ?, how_met = ?, interests = ?, 
-      personality_traits = ?, conversation_style = ?, shared_experiences = ?, 
-      story_preferences = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND user_id = ?`,
-    [
-      name,
-      relationship,
-      how_met,
-      JSON.stringify(interests),
-      JSON.stringify(personality_traits),
-      conversation_style,
-      JSON.stringify(shared_experiences),
-      JSON.stringify(story_preferences),
-      notes,
-      id,
-      req.user.userId
-    ],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to update person' });
+  try {
+    const person = await prisma.person.update({
+      where: { id: Number(id) },
+      data: {
+        name,
+        relationship: relationship || null,
+        howMet: how_met || null,
+        interests: JSON.stringify(interests || []),
+        personalityTraits: JSON.stringify(personality_traits || []),
+        conversationStyle: conversation_style || null,
+        sharedExperiences: JSON.stringify(shared_experiences || []),
+        storyPreferences: JSON.stringify(story_preferences || []),
+        notes: notes || null
       }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Person not found' });
-      }
-
-      // Return the updated person
-      db.get(
-        'SELECT * FROM people WHERE id = ?',
-        [id],
-        (err, person) => {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to retrieve updated person' });
-          }
-          
-          // Parse JSON fields
-          const parsedPerson = {
-            ...person,
-            interests: person.interests ? JSON.parse(person.interests) : [],
-            personality_traits: person.personality_traits ? JSON.parse(person.personality_traits) : [],
-            shared_experiences: person.shared_experiences ? JSON.parse(person.shared_experiences) : [],
-            story_preferences: person.story_preferences ? JSON.parse(person.story_preferences) : []
-          };
-          
-          res.json({ person: parsedPerson });
-        }
-      );
-    }
-  );
+    });
+    res.json({ person });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Person not found' });
+    res.status(500).json({ error: 'Failed to update person' });
+  }
 });
 
 // Delete a person
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const db = getDatabase();
-
-  db.run(
-    'DELETE FROM people WHERE id = ? AND user_id = ?',
-    [id, req.user.userId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to delete person' });
-      }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Person not found' });
-      }
-
-      res.json({ message: 'Person deleted successfully' });
-    }
-  );
+  try {
+    await prisma.person.delete({ where: { id: Number(id) } });
+    res.json({ message: 'Person deleted successfully' });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Person not found' });
+    res.status(500).json({ error: 'Failed to delete person' });
+  }
 });
 
 // Get story recommendations for a person

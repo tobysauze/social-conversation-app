@@ -1,63 +1,37 @@
 const express = require('express');
-const { getDatabase } = require('../database/init');
+const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { extractStories, refineStory, generateConversationStarters } = require('../services/openai');
 
 const router = express.Router();
 
 // Get all stories for a user
-router.get('/', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20, tone } = req.query;
-  const offset = (page - 1) * limit;
-
-  let query = `
-    SELECT s.*, je.content as journal_content 
-    FROM stories s 
-    LEFT JOIN journal_entries je ON s.journal_entry_id = je.id 
-    WHERE s.user_id = ?
-  `;
-  const params = [req.user.userId];
-
-  if (tone) {
-    query += ' AND s.tone = ?';
-    params.push(tone);
-  }
-
-  query += ' ORDER BY s.created_at DESC LIMIT ? OFFSET ?';
-  params.push(limit, offset);
-
-  db.all(query, params, (err, stories) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
+  const skip = (Number(page) - 1) * Number(limit);
+  try {
+    const stories = await prisma.story.findMany({
+      where: { userId: req.user.userId, ...(tone ? { tone } : {}) },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit)
+    });
     res.json({ stories });
-  });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get a specific story
-router.get('/:id', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-
-  db.get(
-    `SELECT s.*, je.content as journal_content 
-     FROM stories s 
-     LEFT JOIN journal_entries je ON s.journal_entry_id = je.id 
-     WHERE s.id = ? AND s.user_id = ?`,
-    [id, req.user.userId],
-    (err, story) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!story) {
-        return res.status(404).json({ error: 'Story not found' });
-      }
-
-      res.json({ story });
-    }
-  );
+  try {
+    const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    res.json({ story });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Extract stories from a journal entry
@@ -111,31 +85,22 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Title and content are required' });
     }
 
-    const db = getDatabase();
-    const tagsString = tags ? JSON.stringify(tags) : null;
-
-    db.run(
-      `INSERT INTO stories (user_id, journal_entry_id, title, content, tone, duration_seconds, tags) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.userId, journal_entry_id, title, content, tone, duration_seconds, tagsString],
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to create story' });
+    try {
+      const story = await prisma.story.create({
+        data: {
+          userId: req.user.userId,
+          journalEntryId: journal_entry_id || null,
+          title,
+          content,
+          tone,
+          durationSeconds: duration_seconds,
+          tags: tags ? JSON.stringify(tags) : null
         }
-
-        // Return the created story
-        db.get(
-          'SELECT * FROM stories WHERE id = ?',
-          [this.lastID],
-          (err, story) => {
-            if (err) {
-              return res.status(500).json({ error: 'Failed to retrieve created story' });
-            }
-            res.status(201).json({ story });
-          }
-        );
-      }
-    );
+      });
+      res.status(201).json({ story });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to create story' });
+    }
   } catch (error) {
     console.error('Create story error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -147,7 +112,7 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { tone = 'casual', duration = 30 } = req.body;
-    const db = getDatabase();
+    const db = null;
 
     // Get the story
     db.get(
@@ -167,29 +132,11 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
           const refinedContent = await refineStory(story.content, tone, duration);
           
           // Update the story in database
-          db.run(
-            `UPDATE stories 
-             SET content = ?, tone = ?, duration_seconds = ?, updated_at = CURRENT_TIMESTAMP 
-             WHERE id = ?`,
-            [refinedContent, tone, duration, id],
-            function(err) {
-              if (err) {
-                return res.status(500).json({ error: 'Failed to update story' });
-              }
-
-              // Return the updated story
-              db.get(
-                'SELECT * FROM stories WHERE id = ?',
-                [id],
-                (err, updatedStory) => {
-                  if (err) {
-                    return res.status(500).json({ error: 'Failed to retrieve updated story' });
-                  }
-                  res.json({ story: updatedStory });
-                }
-              );
-            }
-          );
+          const updatedStory = await prisma.story.update({
+            where: { id: Number(id) },
+            data: { content: refinedContent, tone, durationSeconds: duration }
+          });
+          res.json({ story: updatedStory });
         } catch (error) {
           console.error('Story refinement error:', error);
           res.status(500).json({ error: 'Failed to refine story' });
@@ -206,7 +153,7 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
 router.get('/:id/conversation-starters', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const db = getDatabase();
+    const db = null;
 
     // Get the story
     db.get(
@@ -222,24 +169,14 @@ router.get('/:id/conversation-starters', authenticateToken, async (req, res) => 
         }
 
         try {
-          // Generate conversation starters using OpenAI
           const starters = await generateConversationStarters(story.content);
-          
-          // Save conversation starters to database
-          const insertPromises = starters.questions.map(question => {
-            return new Promise((resolve, reject) => {
-              db.run(
-                'INSERT INTO conversation_starters (user_id, story_id, question) VALUES (?, ?, ?)',
-                [req.user.userId, id, question],
-                function(err) {
-                  if (err) reject(err);
-                  else resolve();
-                }
-              );
-            });
-          });
-
-          await Promise.all(insertPromises);
+          await Promise.all(
+            starters.questions.map((question) =>
+              prisma.conversationStarter.create({
+                data: { userId: req.user.userId, storyId: Number(id), question }
+              })
+            )
+          );
           res.json({ conversation_starters: starters.questions });
         } catch (error) {
           console.error('Conversation starters error:', error);
@@ -254,10 +191,9 @@ router.get('/:id/conversation-starters', authenticateToken, async (req, res) => 
 });
 
 // Update story (mark as told, add success rating)
-router.patch('/:id', authenticateToken, (req, res) => {
+router.patch('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { times_told, success_rating } = req.body;
-  const db = getDatabase();
 
   const updates = [];
   const params = [];
@@ -277,45 +213,28 @@ router.patch('/:id', authenticateToken, (req, res) => {
   }
 
   updates.push('updated_at = CURRENT_TIMESTAMP');
-  params.push(id, req.user.userId);
-
-  db.run(
-    `UPDATE stories SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
-    params,
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to update story' });
-      }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Story not found' });
-      }
-
-      res.json({ message: 'Story updated successfully' });
-    }
-  );
+  try {
+    await prisma.story.update({
+      where: { id: Number(id) },
+      data: Object.fromEntries(updates.map((u, i) => [u.split(' = ')[0].replace('duration_seconds','durationSeconds').replace('times_told','timesTold').replace('success_rating','successRating'), params[i]]))
+    });
+    res.json({ message: 'Story updated successfully' });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Story not found' });
+    res.status(500).json({ error: 'Failed to update story' });
+  }
 });
 
 // Delete a story
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const db = getDatabase();
-
-  db.run(
-    'DELETE FROM stories WHERE id = ? AND user_id = ?',
-    [id, req.user.userId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to delete story' });
-      }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Story not found' });
-      }
-
-      res.json({ message: 'Story deleted successfully' });
-    }
-  );
+  try {
+    await prisma.story.delete({ where: { id: Number(id) } });
+    res.json({ message: 'Story deleted successfully' });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Story not found' });
+    res.status(500).json({ error: 'Failed to delete story' });
+  }
 });
 
 module.exports = router;
