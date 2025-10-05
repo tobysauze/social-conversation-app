@@ -19,6 +19,8 @@ model User {
   stories        Story[]
   people         Person[]
   jokes          Joke[]
+  practiceSessions     PracticeSession[]
+  conversationStarters ConversationStarter[]
 }
 
 model JournalEntry {
@@ -48,6 +50,8 @@ model Story {
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
   user            User      @relation(fields: [userId], references: [id])
   journalEntry    JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  practiceSessions     PracticeSession[]
+  conversationStarters ConversationStarter[]
 }
 
 model PracticeSession {

@@ -10,6 +10,7 @@ const storyRoutes = require('./routes/stories');
 const practiceRoutes = require('./routes/practice');
 const peopleRoutes = require('./routes/people');
 const jokesRoutes = require('./routes/jokes');
+const adminRoutes = require('./routes/admin');
 // Prisma client (Postgres)
 let prisma = null;
 try {
@@ -76,6 +77,7 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/practice', practiceRoutes);
 app.use('/api/people', peopleRoutes);
 app.use('/api/jokes', jokesRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
