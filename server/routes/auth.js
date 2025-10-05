@@ -90,7 +90,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, (req, res) => {
+router.get('/me', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
