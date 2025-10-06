@@ -192,131 +192,50 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 router.get('/:id/story-recommendations', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const db = getDatabase();
+    const person = await prisma.person.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
 
-    // Get person details
-    db.get(
-      'SELECT * FROM people WHERE id = ? AND user_id = ?',
-      [id, req.user.userId],
-      async (err, person) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+    const stories = await prisma.story.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createdAt: 'desc' }
+    });
 
-        if (!person) {
-          return res.status(404).json({ error: 'Person not found' });
-        }
+    const parsedPerson = {
+      id: person.id,
+      name: person.name,
+      interests: person.interests ? JSON.parse(person.interests) : [],
+      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
+      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
+      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : []
+    };
 
-        // Get user's stories and journal entries
-        db.all(
-          `SELECT s.*, je.content as journal_content 
-           FROM stories s 
-           LEFT JOIN journal_entries je ON s.journal_entry_id = je.id 
-           WHERE s.user_id = ? 
-           ORDER BY s.created_at DESC`,
-          [req.user.userId],
-          async (err, stories) => {
-            if (err) {
-              return res.status(500).json({ error: 'Database error' });
-            }
-
-            try {
-              // Parse person's JSON fields
-              const parsedPerson = {
-                ...person,
-                interests: person.interests ? JSON.parse(person.interests) : [],
-                personality_traits: person.personality_traits ? JSON.parse(person.personality_traits) : [],
-                shared_experiences: person.shared_experiences ? JSON.parse(person.shared_experiences) : [],
-                story_preferences: person.story_preferences ? JSON.parse(person.story_preferences) : []
-              };
-
-              // Get AI recommendations
-              const recommendations = await getStoryRecommendations(parsedPerson, stories);
-              res.json({ recommendations });
-            } catch (error) {
-              console.error('Error getting story recommendations:', error);
-              res.status(500).json({ error: 'Failed to get story recommendations' });
-            }
-          }
-        );
-      }
-    );
+    const recommendations = await getStoryRecommendations(parsedPerson, stories);
+    res.json({ recommendations });
   } catch (error) {
     console.error('Story recommendations error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to get story recommendations' });
   }
 });
 
 // Tag a story with a person
-router.post('/:id/tag-story/:storyId', authenticateToken, (req, res) => {
-  const { id: personId, storyId } = req.params;
-  const db = getDatabase();
-
-  db.run(
-    'INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)',
-    [storyId, personId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to tag story' });
-      }
-
-      res.json({ message: 'Story tagged successfully' });
-    }
-  );
+router.post('/:id/tag-story/:storyId', authenticateToken, async (req, res) => {
+  // TODO: implement join table in Postgres
+  res.json({ message: 'Tagging not yet implemented in Postgres; coming soon.' });
 });
 
 // Remove tag from a story
-router.delete('/:id/tag-story/:storyId', authenticateToken, (req, res) => {
-  const { id: personId, storyId } = req.params;
-  const db = getDatabase();
-
-  db.run(
-    'DELETE FROM story_people WHERE story_id = ? AND person_id = ?',
-    [storyId, personId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to remove tag' });
-      }
-
-      res.json({ message: 'Tag removed successfully' });
-    }
-  );
+router.delete('/:id/tag-story/:storyId', authenticateToken, async (req, res) => {
+  res.json({ message: 'Untag not yet implemented in Postgres; coming soon.' });
 });
 
 // Tag a journal entry with a person
-router.post('/:id/tag-journal/:journalId', authenticateToken, (req, res) => {
-  const { id: personId, journalId } = req.params;
-  const db = getDatabase();
-
-  db.run(
-    'INSERT OR IGNORE INTO journal_people (journal_entry_id, person_id) VALUES (?, ?)',
-    [journalId, personId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to tag journal entry' });
-      }
-
-      res.json({ message: 'Journal entry tagged successfully' });
-    }
-  );
+router.post('/:id/tag-journal/:journalId', authenticateToken, async (req, res) => {
+  res.json({ message: 'Tagging not yet implemented in Postgres; coming soon.' });
 });
 
 // Remove tag from a journal entry
-router.delete('/:id/tag-journal/:journalId', authenticateToken, (req, res) => {
-  const { id: personId, journalId } = req.params;
-  const db = getDatabase();
-
-  db.run(
-    'DELETE FROM journal_people WHERE journal_entry_id = ? AND person_id = ?',
-    [journalId, personId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to remove tag' });
-      }
-
-      res.json({ message: 'Tag removed successfully' });
-    }
-  );
+router.delete('/:id/tag-journal/:journalId', authenticateToken, async (req, res) => {
+  res.json({ message: 'Untag not yet implemented in Postgres; coming soon.' });
 });
 
 // Analyze journal entry for people insights

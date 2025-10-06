@@ -1,87 +1,59 @@
 const express = require('express');
-const { getDatabase } = require('../database/init');
+const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { practiceFeedback } = require('../services/openai');
 
 const router = express.Router();
 
 // Get practice sessions for a user
-router.get('/sessions', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/sessions', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
-  const offset = (page - 1) * limit;
+  const skip = (Number(page) - 1) * Number(limit);
+  try {
+    const sessions = await prisma.practiceSession.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit)
+    });
+    const storyIds = sessions.map(s => s.storyId).filter(Boolean);
+    const stories = storyIds.length
+      ? await prisma.story.findMany({ where: { id: { in: storyIds } }, select: { id: true, title: true } })
+      : [];
+    const idToTitle = Object.fromEntries(stories.map(s => [s.id, s.title]));
 
-  db.all(
-    `SELECT ps.*, s.title as story_title 
-     FROM practice_sessions ps 
-     LEFT JOIN stories s ON ps.story_id = s.id 
-     WHERE ps.user_id = ? 
-     ORDER BY ps.created_at DESC 
-     LIMIT ? OFFSET ?`,
-    [req.user.userId, limit, offset],
-    (err, sessions) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json({ sessions });
-    }
-  );
+    const legacy = sessions.map(s => ({
+      id: s.id,
+      user_id: s.userId,
+      story_id: s.storyId,
+      session_type: s.sessionType,
+      feedback: s.feedback,
+      rating: s.rating,
+      created_at: s.createdAt,
+      story_title: s.storyId ? idToTitle[s.storyId] || null : null
+    }));
+    res.json({ sessions: legacy });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Start a practice session
 router.post('/sessions', authenticateToken, async (req, res) => {
   try {
     const { story_id, session_type = 'storytelling' } = req.body;
-    const db = getDatabase();
-
-    // Verify story belongs to user
     if (story_id) {
-      db.get(
-        'SELECT id FROM stories WHERE id = ? AND user_id = ?',
-        [story_id, req.user.userId],
-        (err, story) => {
-          if (err) {
-            return res.status(500).json({ error: 'Database error' });
-          }
-
-          if (!story) {
-            return res.status(404).json({ error: 'Story not found' });
-          }
-
-          // Create practice session
-          db.run(
-            'INSERT INTO practice_sessions (user_id, story_id, session_type) VALUES (?, ?, ?)',
-            [req.user.userId, story_id, session_type],
-            function(err) {
-              if (err) {
-                return res.status(500).json({ error: 'Failed to create practice session' });
-              }
-
-              res.status(201).json({ 
-                session_id: this.lastID,
-                message: 'Practice session started'
-              });
-            }
-          );
-        }
-      );
-    } else {
-      // Create practice session without story
-      db.run(
-        'INSERT INTO practice_sessions (user_id, session_type) VALUES (?, ?)',
-        [req.user.userId, session_type],
-        function(err) {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to create practice session' });
-          }
-
-          res.status(201).json({ 
-            session_id: this.lastID,
-            message: 'Practice session started'
-          });
-        }
-      );
+      const story = await prisma.story.findFirst({ where: { id: Number(story_id), userId: req.user.userId } });
+      if (!story) return res.status(404).json({ error: 'Story not found' });
     }
+    const created = await prisma.practiceSession.create({
+      data: {
+        userId: req.user.userId,
+        storyId: story_id ? Number(story_id) : null,
+        sessionType: session_type
+      }
+    });
+    res.status(201).json({ session_id: created.id, message: 'Practice session started' });
   } catch (error) {
     console.error('Start practice session error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -98,25 +70,13 @@ router.post('/feedback', authenticateToken, async (req, res) => {
     }
 
     try {
-      // Get feedback from OpenAI
       const feedback = await practiceFeedback(story_content, user_delivery);
-      
-      // Save feedback to database if session_id provided
       if (session_id) {
-        const db = getDatabase();
-        db.run(
-          `UPDATE practice_sessions 
-           SET feedback = ?, rating = ? 
-           WHERE id = ? AND user_id = ?`,
-          [feedback.feedback, feedback.rating, session_id, req.user.userId],
-          (err) => {
-            if (err) {
-              console.error('Failed to save feedback:', err);
-            }
-          }
-        );
+        await prisma.practiceSession.update({
+          where: { id: Number(session_id) },
+          data: { feedback: feedback.feedback, rating: feedback.rating }
+        });
       }
-
       res.json({ feedback });
     } catch (error) {
       console.error('Practice feedback error:', error);
@@ -129,90 +89,77 @@ router.post('/feedback', authenticateToken, async (req, res) => {
 });
 
 // Get conversation starters for practice
-router.get('/conversation-starters', authenticateToken, (req, res) => {
-  const db = getDatabase();
+router.get('/conversation-starters', authenticateToken, async (req, res) => {
   const { story_id } = req.query;
-
-  let query = `
-    SELECT cs.*, s.title as story_title 
-    FROM conversation_starters cs 
-    LEFT JOIN stories s ON cs.story_id = s.id 
-    WHERE cs.user_id = ?
-  `;
-  const params = [req.user.userId];
-
-  if (story_id) {
-    query += ' AND cs.story_id = ?';
-    params.push(story_id);
+  try {
+    const starters = await prisma.conversationStarter.findMany({
+      where: { userId: req.user.userId, ...(story_id ? { storyId: Number(story_id) } : {}) },
+      orderBy: { createdAt: 'desc' }
+    });
+    const storyIds = starters.map(s => s.storyId).filter(Boolean);
+    const stories = storyIds.length
+      ? await prisma.story.findMany({ where: { id: { in: storyIds } }, select: { id: true, title: true } })
+      : [];
+    const idToTitle = Object.fromEntries(stories.map(s => [s.id, s.title]));
+    const legacy = starters.map(s => ({
+      id: s.id,
+      user_id: s.userId,
+      story_id: s.storyId,
+      question: s.question,
+      context: s.context,
+      created_at: s.createdAt,
+      story_title: s.storyId ? idToTitle[s.storyId] || null : null
+    }));
+    res.json({ conversation_starters: legacy });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
   }
-
-  query += ' ORDER BY cs.created_at DESC';
-
-  db.all(query, params, (err, starters) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json({ conversation_starters: starters });
-  });
 });
 
 // Get practice statistics
-router.get('/stats', authenticateToken, (req, res) => {
-  const db = getDatabase();
-
-  // Get various practice statistics
-  const queries = {
-    totalSessions: 'SELECT COUNT(*) as count FROM practice_sessions WHERE user_id = ?',
-    avgRating: 'SELECT AVG(rating) as avg FROM practice_sessions WHERE user_id = ? AND rating IS NOT NULL',
-    storiesPracticed: 'SELECT COUNT(DISTINCT story_id) as count FROM practice_sessions WHERE user_id = ? AND story_id IS NOT NULL',
-    recentSessions: `SELECT COUNT(*) as count FROM practice_sessions 
-                     WHERE user_id = ? AND created_at >= datetime('now', '-7 days')`
-  };
-
-  const stats = {};
-  let completedQueries = 0;
-  const totalQueries = Object.keys(queries).length;
-
-  Object.entries(queries).forEach(([key, query]) => {
-    db.get(query, [req.user.userId], (err, result) => {
-      if (err) {
-        console.error(`Error getting ${key}:`, err);
-        stats[key] = 0;
-      } else {
-        stats[key] = result.count || result.avg || 0;
-      }
-
-      completedQueries++;
-      if (completedQueries === totalQueries) {
-        res.json({ stats });
-      }
-    });
-  });
+router.get('/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const [totalSessions, avgAgg, storyGroups, recentSessions] = await Promise.all([
+      prisma.practiceSession.count({ where: { userId } }),
+      prisma.practiceSession.aggregate({ _avg: { rating: true }, where: { userId, rating: { not: null } } }),
+      prisma.practiceSession.groupBy({ by: ['storyId'], where: { userId, storyId: { not: null } } }),
+      prisma.practiceSession.count({ where: { userId, createdAt: { gte: new Date(Date.now() - 7*24*60*60*1000) } } })
+    ]);
+    res.json({ stats: {
+      totalSessions,
+      avgRating: Number(avgAgg._avg.rating || 0),
+      storiesPracticed: storyGroups.filter(g => g.storyId !== null).length,
+      recentSessions
+    }});
+  } catch (e) {
+    console.error('Stats error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get a specific practice session
-router.get('/sessions/:id', authenticateToken, (req, res) => {
+router.get('/sessions/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const db = getDatabase();
-
-  db.get(
-    `SELECT ps.*, s.title as story_title, s.content as story_content 
-     FROM practice_sessions ps 
-     LEFT JOIN stories s ON ps.story_id = s.id 
-     WHERE ps.id = ? AND ps.user_id = ?`,
-    [id, req.user.userId],
-    (err, session) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!session) {
-        return res.status(404).json({ error: 'Practice session not found' });
-      }
-
-      res.json({ session });
-    }
-  );
+  try {
+    const ps = await prisma.practiceSession.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!ps) return res.status(404).json({ error: 'Practice session not found' });
+    const story = ps.storyId ? await prisma.story.findUnique({ where: { id: ps.storyId } }) : null;
+    const legacy = {
+      id: ps.id,
+      user_id: ps.userId,
+      story_id: ps.storyId,
+      session_type: ps.sessionType,
+      feedback: ps.feedback,
+      rating: ps.rating,
+      created_at: ps.createdAt,
+      story_title: story ? story.title : null,
+      story_content: story ? story.content : null
+    };
+    res.json({ session: legacy });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 module.exports = router;
