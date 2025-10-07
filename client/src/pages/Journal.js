@@ -257,7 +257,7 @@ const Journal = () => {
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 rows={6}
-                className="input-field"
+                className="input-field w-full"
                 placeholder="Write about your day, experiences, thoughts, or anything that happened..."
                 required
               />
