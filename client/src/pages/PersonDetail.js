@@ -32,6 +32,13 @@ const PersonDetail = () => {
   const [jokes, setJokes] = useState([]);
   const [loadingJokes, setLoadingJokes] = useState(false);
 
+  const formatDateSafe = (value) => {
+    if (!value) return 'Unknown';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return 'Unknown';
+    return format(d, 'MMM d, yyyy');
+  };
+
   useEffect(() => {
     loadPerson();
     loadJokes();
@@ -45,6 +52,11 @@ const PersonDetail = () => {
       // Backend already parses JSON fields, just ensure dates are valid
       const parsedPerson = {
         ...personData,
+        // Normalize array fields to always be arrays
+        interests: Array.isArray(personData.interests) ? personData.interests : [],
+        personality_traits: Array.isArray(personData.personality_traits) ? personData.personality_traits : [],
+        shared_experiences: Array.isArray(personData.shared_experiences) ? personData.shared_experiences : [],
+        story_preferences: Array.isArray(personData.story_preferences) ? personData.story_preferences : [],
         // Ensure dates are valid
         created_at: personData.created_at || new Date().toISOString(),
         updated_at: personData.updated_at || new Date().toISOString()
@@ -132,7 +144,7 @@ const PersonDetail = () => {
   const removeArrayItem = (field, index) => {
     setEditForm(prev => ({
       ...prev,
-      [field]: prev[field].filter((_, i) => i !== index)
+      [field]: (prev[field] || []).filter((_, i) => i !== index)
     }));
   };
 
@@ -565,11 +577,19 @@ const PersonDetail = () => {
                         {joke.content}
                       </p>
                       <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>Created {format(new Date(joke.created_at), 'MMM d, yyyy')}</span>
-                        {joke.times_told > 0 && (
+                        <span>
+                          {(() => {
+                            const dateValue = joke.created_at || joke.createdAt;
+                            const d = dateValue ? new Date(dateValue) : null;
+                            return d && !isNaN(d.getTime())
+                              ? `Created ${format(d, 'MMM d, yyyy')}`
+                              : 'Created: Unknown';
+                          })()}
+                        </span>
+                        {(joke.times_told || joke.timesTold) > 0 && (
                           <span className="flex items-center">
                             <Star className="w-3 h-3 mr-1" />
-                            Told {joke.times_told} times
+                            {`Told ${joke.times_told || joke.timesTold} times`}
                           </span>
                         )}
                       </div>
@@ -636,11 +656,11 @@ const PersonDetail = () => {
               <div className="space-y-2 text-sm text-gray-600">
                 <div className="flex items-center">
                   <Calendar className="w-4 h-4 mr-2" />
-                  Created: {person.created_at ? format(new Date(person.created_at), 'MMM d, yyyy') : 'Unknown'}
+                  Created: {formatDateSafe(person.created_at || person.createdAt)}
                 </div>
                 <div className="flex items-center">
                   <Clock className="w-4 h-4 mr-2" />
-                  Updated: {person.updated_at ? format(new Date(person.updated_at), 'MMM d, yyyy') : 'Unknown'}
+                  Updated: {formatDateSafe(person.updated_at || person.updatedAt)}
                 </div>
               </div>
             </div>

@@ -12,3 +12,4 @@ services:
         value: your-super-secret-jwt-key-here-make-it-long-and-random-12345
       - key: FRONTEND_URL
         value: https://your-app.vercel.app
+

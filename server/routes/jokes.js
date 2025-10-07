@@ -213,7 +213,21 @@ router.get('/person/:personId', authenticateToken, async (req, res) => {
       where: { userId: req.user.userId, /* future: join table if needed */ },
       orderBy: { createdAt: 'desc' }
     });
-    res.json({ jokes: tagged });
+    // Return in legacy shape expected by client
+    const legacy = tagged.map(j => ({
+      id: j.id,
+      user_id: j.userId,
+      title: j.title,
+      content: j.content,
+      category: j.category,
+      difficulty: j.difficulty,
+      times_told: j.timesTold,
+      success_rating: j.successRating,
+      notes: j.notes,
+      created_at: j.createdAt,
+      updated_at: j.updatedAt
+    }));
+    res.json({ jokes: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
