@@ -109,4 +109,17 @@ export const peopleAPI = {
     iterateJoke: (jokeId, conversationHistory) => api.post(`/jokes/${jokeId}/iterate`, { conversationHistory })
   };
 
+// Wellness API
+export const wellnessAPI = {
+  list: (start, end) => {
+    const params = new URLSearchParams();
+    if (start && end) { params.set('start', start); params.set('end', end); }
+    const q = params.toString();
+    return api.get(`/wellness${q ? `?${q}` : ''}`);
+  },
+  upsert: (data) => api.post('/wellness', data),
+  remove: (id) => api.delete(`/wellness/${id}`),
+  correlations: () => api.get('/wellness/correlations')
+};
+
 export default api;

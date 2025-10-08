@@ -11,7 +11,8 @@ import {
   LogOut,
   Home,
   Users,
-  Laugh
+  Laugh,
+  Heart
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -26,6 +27,7 @@ const Navbar = () => {
     { name: 'Practice', href: '/practice', icon: Play },
     { name: 'People', href: '/people', icon: Users },
     { name: 'Jokes', href: '/jokes', icon: Laugh },
+    { name: 'Wellness', href: '/wellness', icon: Heart },
   ];
 
   const isActive = (path) => location.pathname === path;

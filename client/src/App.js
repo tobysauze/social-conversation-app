@@ -13,6 +13,7 @@ import Profile from './pages/Profile';
 import People from './pages/People';
 import PersonDetail from './pages/PersonDetail';
 import Jokes from './pages/Jokes';
+import Wellness from './pages/Wellness';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -95,6 +96,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Practice />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/wellness" 
+            element={
+              <ProtectedRoute>
+                <Wellness />
               </ProtectedRoute>
             } 
           />
