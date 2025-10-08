@@ -31,12 +31,32 @@ const PersonDetail = () => {
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [jokes, setJokes] = useState([]);
   const [loadingJokes, setLoadingJokes] = useState(false);
+  const [quickNote, setQuickNote] = useState('');
+  const [savingQuickNote, setSavingQuickNote] = useState(false);
 
   const formatDateSafe = (value) => {
     if (!value) return 'Unknown';
     const d = new Date(value);
     if (isNaN(d.getTime())) return 'Unknown';
     return format(d, 'MMM d, yyyy');
+  };
+
+  const handleAddQuickNote = async () => {
+    if (!quickNote.trim()) return;
+    setSavingQuickNote(true);
+    try {
+      const timestamp = format(new Date(), 'MMM d, yyyy h:mm a');
+      const observations = `[${timestamp}] ${quickNote.trim()}`;
+      await peopleAPI.applyInsights(id, { observations });
+      setQuickNote('');
+      await loadPerson();
+      toast.success('Note added');
+    } catch (error) {
+      console.error('Error adding quick note:', error);
+      toast.error('Failed to add note');
+    } finally {
+      setSavingQuickNote(false);
+    }
   };
 
   useEffect(() => {
@@ -528,6 +548,28 @@ const PersonDetail = () => {
                   {person.notes || 'No notes recorded'}
                 </p>
               )}
+
+              {/* Quick Note input - always available */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quick note</label>
+                <div className="flex items-start space-x-3">
+                  <textarea
+                    value={quickNote}
+                    onChange={(e) => setQuickNote(e.target.value)}
+                    rows={3}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Add a quick note..."
+                  />
+                  <button
+                    onClick={handleAddQuickNote}
+                    disabled={savingQuickNote || !quickNote.trim()}
+                    className="btn-primary"
+                  >
+                    {savingQuickNote ? 'Adding...' : 'Add'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Appends a timestamped note to this profile.</p>
+              </div>
             </div>
 
             {/* Jokes Section */}
