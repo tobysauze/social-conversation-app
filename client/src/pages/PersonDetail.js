@@ -33,6 +33,9 @@ const PersonDetail = () => {
   const [loadingJokes, setLoadingJokes] = useState(false);
   const [quickNote, setQuickNote] = useState('');
   const [savingQuickNote, setSavingQuickNote] = useState(false);
+  const [showAddJoke, setShowAddJoke] = useState(false);
+  const [newJoke, setNewJoke] = useState({ title: '', content: '' });
+  const [addingJoke, setAddingJoke] = useState(false);
 
   const formatDateSafe = (value) => {
     if (!value) return 'Unknown';
@@ -153,21 +156,24 @@ const PersonDetail = () => {
   };
 
   const handleAddJoke = async () => {
-    const title = prompt('Joke title');
-    if (!title) return;
-    const content = prompt('Joke content');
-    if (!content) return;
+    if (!newJoke.title.trim() || !newJoke.content.trim()) {
+      toast.error('Please enter a title and content');
+      return;
+    }
+    setAddingJoke(true);
     try {
-      // Create the joke globally
-      const res = await jokesAPI.createJoke({ title, content });
-      const newJoke = res.data.joke;
-      // Tag to this person only (does not affect main jokes list existence)
-      await jokesAPI.tagPerson(newJoke.id, id);
+      const res = await jokesAPI.createJoke({ title: newJoke.title.trim(), content: newJoke.content.trim() });
+      const created = res.data.joke;
+      await jokesAPI.tagPerson(created.id, id);
+      setNewJoke({ title: '', content: '' });
+      setShowAddJoke(false);
       await loadJokes();
       toast.success('Joke added to this profile');
     } catch (error) {
       console.error('Error adding joke:', error);
       toast.error('Failed to add joke');
+    } finally {
+      setAddingJoke(false);
     }
   };
 
@@ -619,12 +625,33 @@ const PersonDetail = () => {
                   <p className="text-gray-500 text-sm mb-4">
                     No jokes tagged for {person.name} yet
                   </p>
-                  <button
-                    onClick={() => navigate('/jokes')}
-                    className="btn-primary text-sm"
-                  >
-                    Go to Jokes
-                  </button>
+                  <div className="max-w-2xl mx-auto text-left">
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Add a joke for {person.name}</h4>
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          placeholder="Title"
+                          value={newJoke.title}
+                          onChange={(e)=>setNewJoke(prev=>({ ...prev, title: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <textarea
+                          rows={3}
+                          placeholder="Joke content"
+                          value={newJoke.content}
+                          onChange={(e)=>setNewJoke(prev=>({ ...prev, content: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <div className="flex items-center space-x-3">
+                          <button onClick={handleAddJoke} disabled={addingJoke} className="btn-primary text-sm">
+                            {addingJoke ? 'Adding...' : 'Add Joke'}
+                          </button>
+                          <button onClick={()=>navigate('/jokes')} className="btn-secondary text-sm">Go to Jokes</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -675,12 +702,39 @@ const PersonDetail = () => {
                     </div>
                   ))}
                   <div className="pt-2">
-                    <button
-                      onClick={handleAddJoke}
-                      className="w-full btn-primary text-sm mb-2"
-                    >
-                      Add Joke To This Person
-                    </button>
+                    {!showAddJoke ? (
+                      <button
+                        onClick={()=>setShowAddJoke(true)}
+                        className="w-full btn-primary text-sm mb-2"
+                      >
+                        Add Joke To This Person
+                      </button>
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-2">
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="Title"
+                            value={newJoke.title}
+                            onChange={(e)=>setNewJoke(prev=>({ ...prev, title: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <textarea
+                            rows={3}
+                            placeholder="Joke content"
+                            value={newJoke.content}
+                            onChange={(e)=>setNewJoke(prev=>({ ...prev, content: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <div className="flex items-center space-x-3">
+                            <button onClick={handleAddJoke} disabled={addingJoke} className="btn-primary text-sm">
+                              {addingJoke ? 'Adding...' : 'Add Joke'}
+                            </button>
+                            <button onClick={()=>{ setShowAddJoke(false); setNewJoke({ title:'', content:'' }); }} className="btn-secondary text-sm">Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <button
                       onClick={() => navigate('/jokes')}
                       className="w-full btn-secondary text-sm"
