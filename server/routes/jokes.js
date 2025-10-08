@@ -5,6 +5,27 @@ const { generateJoke, iterateJoke } = require('../services/openai');
 
 const router = express.Router();
 
+// Minimal join table support for Postgres without Prisma schema migration
+let ensuredJokePeople = false;
+async function ensureJokePeopleTable() {
+  if (ensuredJokePeople) return;
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS joke_people (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        joke_id INTEGER NOT NULL,
+        person_id INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (joke_id, person_id)
+      )`
+    );
+  } catch (e) {
+    console.warn('Could not ensure joke_people table exists:', e?.message);
+  }
+  ensuredJokePeople = true;
+}
+
 // Get all jokes for a user
 router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
@@ -167,53 +188,57 @@ router.post('/generate', authenticateToken, async (req, res) => {
 });
 
 // Tag a joke to a person
-router.post('/:id/tag-person/:personId', authenticateToken, (req, res) => {
-  const db = null;
+router.post('/:id/tag-person/:personId', authenticateToken, async (req, res) => {
   const { id, personId } = req.params;
-
-  db.run(
-    'INSERT INTO joke_people (joke_id, person_id) VALUES (?, ?)',
-    [id, personId],
-    function(err) {
-      if (err) {
-        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-          return res.status(400).json({ error: 'Joke is already tagged to this person' });
-        }
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json({ message: 'Joke tagged to person successfully' });
-    }
-  );
+  try {
+    await ensureJokePeopleTable();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO joke_people (user_id, joke_id, person_id) VALUES ($1, $2, $3)
+       ON CONFLICT (joke_id, person_id) DO NOTHING`,
+      req.user.userId,
+      Number(id),
+      Number(personId)
+    );
+    res.json({ message: 'Joke tagged to person successfully' });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Untag a joke from a person
-router.delete('/:id/tag-person/:personId', authenticateToken, (req, res) => {
-  const db = null;
+router.delete('/:id/tag-person/:personId', authenticateToken, async (req, res) => {
   const { id, personId } = req.params;
-
-  db.run(
-    'DELETE FROM joke_people WHERE joke_id = ? AND person_id = ?',
-    [id, personId],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json({ message: 'Joke untagged from person successfully' });
-    }
-  );
+  try {
+    await ensureJokePeopleTable();
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM joke_people WHERE user_id=$1 AND joke_id=$2 AND person_id=$3`,
+      req.user.userId,
+      Number(id),
+      Number(personId)
+    );
+    res.json({ message: 'Joke untagged from person successfully' });
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get jokes for a specific person
 router.get('/person/:personId', authenticateToken, async (req, res) => {
   const { personId } = req.params;
   try {
+    await ensureJokePeopleTable();
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT joke_id FROM joke_people WHERE user_id=$1 AND person_id=$2`,
+      req.user.userId,
+      Number(personId)
+    );
+    const jokeIds = rows.map(r => Number(r.joke_id));
+    if (jokeIds.length === 0) return res.json({ jokes: [] });
+
     const tagged = await prisma.joke.findMany({
-      where: { userId: req.user.userId, /* future: join table if needed */ },
+      where: { userId: req.user.userId, id: { in: jokeIds } },
       orderBy: { createdAt: 'desc' }
     });
-    // Return in legacy shape expected by client
     const legacy = tagged.map(j => ({
       id: j.id,
       user_id: j.userId,

@@ -152,6 +152,36 @@ const PersonDetail = () => {
     }
   };
 
+  const handleAddJoke = async () => {
+    const title = prompt('Joke title');
+    if (!title) return;
+    const content = prompt('Joke content');
+    if (!content) return;
+    try {
+      // Create the joke globally
+      const res = await jokesAPI.createJoke({ title, content });
+      const newJoke = res.data.joke;
+      // Tag to this person only (does not affect main jokes list existence)
+      await jokesAPI.tagPerson(newJoke.id, id);
+      await loadJokes();
+      toast.success('Joke added to this profile');
+    } catch (error) {
+      console.error('Error adding joke:', error);
+      toast.error('Failed to add joke');
+    }
+  };
+
+  const handleUnlinkJoke = async (jokeId) => {
+    try {
+      await jokesAPI.untagPerson(jokeId, id);
+      await loadJokes();
+      toast.success('Joke removed from this profile');
+    } catch (error) {
+      console.error('Error unlinking joke:', error);
+      toast.error('Failed to remove joke from profile');
+    }
+  };
+
   const addArrayItem = (field, value) => {
     if (value.trim()) {
       setEditForm(prev => ({
@@ -603,6 +633,13 @@ const PersonDetail = () => {
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="font-medium text-gray-900 text-sm">{joke.title}</h3>
                         <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => handleUnlinkJoke(joke.id)}
+                            className="px-2 py-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                            title="Remove from this person"
+                          >
+                            Remove
+                          </button>
                           {joke.category && (
                             <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                               {joke.category}
@@ -638,6 +675,12 @@ const PersonDetail = () => {
                     </div>
                   ))}
                   <div className="pt-2">
+                    <button
+                      onClick={handleAddJoke}
+                      className="w-full btn-primary text-sm mb-2"
+                    >
+                      Add Joke To This Person
+                    </button>
                     <button
                       onClick={() => navigate('/jokes')}
                       className="w-full btn-secondary text-sm"
