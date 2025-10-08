@@ -51,9 +51,21 @@ const People = () => {
   const loadPeople = async () => {
     try {
       const response = await peopleAPI.getPeople();
-      const peopleData = response.data.people || [];
-      
-      // Backend already parses JSON fields
+      const peopleData = (response.data.people || []).map(p => ({
+        ...p,
+        interests: Array.isArray(p.interests)
+          ? p.interests
+          : (typeof p.interests === 'string' ? (() => { try { return JSON.parse(p.interests); } catch { return []; } })() : []),
+        personality_traits: Array.isArray(p.personality_traits)
+          ? p.personality_traits
+          : (typeof p.personality_traits === 'string' ? (() => { try { return JSON.parse(p.personality_traits); } catch { return []; } })() : []),
+        shared_experiences: Array.isArray(p.shared_experiences)
+          ? p.shared_experiences
+          : (typeof p.shared_experiences === 'string' ? (() => { try { return JSON.parse(p.shared_experiences); } catch { return []; } })() : []),
+        story_preferences: Array.isArray(p.story_preferences)
+          ? p.story_preferences
+          : (typeof p.story_preferences === 'string' ? (() => { try { return JSON.parse(p.story_preferences); } catch { return []; } })() : [])
+      }));
       setPeople(peopleData);
     } catch (error) {
       console.error('Error loading people:', error);
@@ -219,13 +231,15 @@ const People = () => {
     }
   };
 
-  const filteredPeople = people.filter(person =>
-    person.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (person.relationship && person.relationship.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (person.interests && person.interests.some(interest => 
-      interest.toLowerCase().includes(searchTerm.toLowerCase())
-    ))
-  );
+  const filteredPeople = people.filter(person => {
+    const term = searchTerm.toLowerCase();
+    const interests = Array.isArray(person.interests) ? person.interests : [];
+    return (
+      person.name.toLowerCase().includes(term) ||
+      (person.relationship && person.relationship.toLowerCase().includes(term)) ||
+      interests.some(interest => (interest || '').toLowerCase().includes(term))
+    );
+  });
 
   if (loading) {
     return (
