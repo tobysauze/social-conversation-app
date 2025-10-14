@@ -113,38 +113,17 @@ const Stories = () => {
     
     setIsImprovingStory(true);
     try {
-      // For now, we'll create a mock improvement since we don't have the OpenAI API set up
-      // In a real implementation, this would call your backend API which uses OpenAI
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
-      
+      const res = await storiesAPI.refineStory(selectedStory.id, { tone: 'funny', duration: 45 });
+      const s = res.data.story;
       const improved = {
-        title: `Enhanced: ${selectedStory.title}`,
-        content: `Here's an improved version of your story that would be more engaging to tell:
-
-**Original Story:**
-${selectedStory.content}
-
-**Improved Version:**
-${selectedStory.content}
-
-**Storytelling Tips:**
-• Start with a hook: "You'll never believe what happened when..."
-• Add sensory details: What did you see, hear, feel?
-• Include dialogue: "She said, 'I can't believe you did that!'"
-• Build tension: Create anticipation before revealing outcomes
-• End with a lesson or insight: What did you learn from this experience?
-
-**Conversation Starters:**
-• "Have you ever had a moment where you had to stand up for what's right?"
-• "Do you think it's better to speak up or stay quiet in awkward situations?"
-• "What would you have done in my shoes?"
-
-This story shows your ability to navigate social dynamics and make thoughtful decisions. It demonstrates empathy, leadership, and emotional intelligence - all great conversation topics!`,
-        tags: [...(selectedStory.tags || []), 'improved', 'storytelling-tips']
+        title: s.title,
+        content: s.content,
+        tags: [...(selectedStory.tags || []), 'improved']
       };
-      
       setImprovedStory(improved);
-      toast.success('Story improved successfully!');
+      // Update local list with refined content
+      setStories(prev => prev.map(st => st.id === selectedStory.id ? { ...st, content: s.content } : st));
+      toast.success('Story improved!');
     } catch (error) {
       toast.error('Failed to improve story. Please try again.');
     } finally {
