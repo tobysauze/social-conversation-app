@@ -1,5 +1,6 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
+const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
 const { extractStories, refineStory, generateConversationStarters } = require('../services/openai');
 
@@ -10,27 +11,54 @@ router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20, tone } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
   try {
-    const stories = await prisma.story.findMany({
-      where: { userId: req.user.userId, ...(tone ? { tone } : {}) },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: Number(limit)
-    });
-    const legacy = stories.map(s => ({
-      id: s.id,
-      user_id: s.userId,
-      journal_entry_id: s.journalEntryId,
-      title: s.title,
-      content: s.content,
-      tone: s.tone,
-      duration_seconds: s.durationSeconds,
-      tags: s.tags ? (typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags) : [],
-      times_told: s.timesTold,
-      success_rating: s.successRating,
-      created_at: s.createdAt,
-      updated_at: s.updatedAt
-    }));
-    res.json({ stories: legacy });
+    try {
+      const stories = await prisma.story.findMany({
+        where: { userId: req.user.userId, ...(tone ? { tone } : {}) },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Number(limit)
+      });
+      const legacy = stories.map(s => ({
+        id: s.id,
+        user_id: s.userId,
+        journal_entry_id: s.journalEntryId,
+        title: s.title,
+        content: s.content,
+        tone: s.tone,
+        duration_seconds: s.durationSeconds,
+        tags: s.tags ? (typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags) : [],
+        times_told: s.timesTold,
+        success_rating: s.successRating,
+        created_at: s.createdAt,
+        updated_at: s.updatedAt
+      }));
+      return res.json({ stories: legacy });
+    } catch (pgErr) {
+      // Fallback to SQLite
+      const db = getDatabase();
+      const rows = db.prepare(
+        `SELECT id, user_id, journal_entry_id, title, content, tone, duration_seconds, tags, times_told, success_rating, created_at, updated_at
+         FROM stories
+         WHERE user_id = ? ${tone ? 'AND tone = ?' : ''}
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`
+      ).all(...[req.user.userId, ...(tone ? [tone] : []), Number(limit), skip]);
+      const legacy = rows.map(s => ({
+        id: s.id,
+        user_id: s.user_id,
+        journal_entry_id: s.journal_entry_id,
+        title: s.title,
+        content: s.content,
+        tone: s.tone,
+        duration_seconds: s.duration_seconds,
+        tags: s.tags ? (typeof s.tags === 'string' && s.tags.trim().startsWith('[') ? JSON.parse(s.tags) : [s.tags]) : [],
+        times_told: s.times_told,
+        success_rating: s.success_rating,
+        created_at: s.created_at,
+        updated_at: s.updated_at
+      }));
+      return res.json({ stories: legacy });
+    }
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -40,23 +68,46 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
-    const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
-    if (!story) return res.status(404).json({ error: 'Story not found' });
-    const legacy = {
-      id: story.id,
-      user_id: story.userId,
-      journal_entry_id: story.journalEntryId,
-      title: story.title,
-      content: story.content,
-      tone: story.tone,
-      duration_seconds: story.durationSeconds,
-      tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
-      times_told: story.timesTold,
-      success_rating: story.successRating,
-      created_at: story.createdAt,
-      updated_at: story.updatedAt
-    };
-    res.json({ story: legacy });
+    try {
+      const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+      if (!story) return res.status(404).json({ error: 'Story not found' });
+      const legacy = {
+        id: story.id,
+        user_id: story.userId,
+        journal_entry_id: story.journalEntryId,
+        title: story.title,
+        content: story.content,
+        tone: story.tone,
+        duration_seconds: story.durationSeconds,
+        tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
+        times_told: story.timesTold,
+        success_rating: story.successRating,
+        created_at: story.createdAt,
+        updated_at: story.updatedAt
+      };
+      return res.json({ story: legacy });
+    } catch (pgErr) {
+      const db = getDatabase();
+      const s = db.prepare(
+        'SELECT * FROM stories WHERE id = ? AND user_id = ?'
+      ).get(Number(id), req.user.userId);
+      if (!s) return res.status(404).json({ error: 'Story not found' });
+      const legacy = {
+        id: s.id,
+        user_id: s.user_id,
+        journal_entry_id: s.journal_entry_id,
+        title: s.title,
+        content: s.content,
+        tone: s.tone,
+        duration_seconds: s.duration_seconds,
+        tags: s.tags ? (typeof s.tags === 'string' && s.tags.trim().startsWith('[') ? JSON.parse(s.tags) : [s.tags]) : [],
+        times_told: s.times_told,
+        success_rating: s.success_rating,
+        created_at: s.created_at,
+        updated_at: s.updated_at
+      };
+      return res.json({ story: legacy });
+    }
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
@@ -141,7 +192,41 @@ router.post('/', authenticateToken, async (req, res) => {
       };
       res.status(201).json({ story: legacy });
     } catch (e) {
-      res.status(500).json({ error: 'Failed to create story' });
+      // Fallback to SQLite
+      try {
+        const db = getDatabase();
+        const stmt = db.prepare(
+          `INSERT INTO stories (user_id, journal_entry_id, title, content, tone, duration_seconds, tags)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        );
+        const info = stmt.run(
+          req.user.userId,
+          journal_entry_id || null,
+          title,
+          content,
+          tone,
+          duration_seconds,
+          tags ? JSON.stringify(tags) : null
+        );
+        const row = db.prepare('SELECT * FROM stories WHERE id = ?').get(info.lastInsertRowid);
+        const legacy = {
+          id: row.id,
+          user_id: row.user_id,
+          journal_entry_id: row.journal_entry_id,
+          title: row.title,
+          content: row.content,
+          tone: row.tone,
+          duration_seconds: row.duration_seconds,
+          tags: row.tags ? (typeof row.tags === 'string' && row.tags.trim().startsWith('[') ? JSON.parse(row.tags) : [row.tags]) : [],
+          times_told: row.times_told,
+          success_rating: row.success_rating,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        };
+        return res.status(201).json({ story: legacy });
+      } catch (sqliteErr) {
+        return res.status(500).json({ error: 'Failed to create story' });
+      }
     }
   } catch (error) {
     console.error('Create story error:', error);
