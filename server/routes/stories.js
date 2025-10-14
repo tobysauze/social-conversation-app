@@ -238,14 +238,14 @@ router.post('/', authenticateToken, async (req, res) => {
 router.post('/:id/refine', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { tone = 'casual', duration = 30 } = req.body;
+    const { tone = 'casual', duration = 30, notes = '' } = req.body;
 
     // Load via Prisma
     const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
     if (!story) return res.status(404).json({ error: 'Story not found' });
 
     try {
-      const refinedContent = await refineStory(story.content, tone, duration);
+      const refinedContent = await refineStory(story.content, tone, duration, notes);
       const updated = await prisma.story.update({
         where: { id: Number(id) },
         data: { content: refinedContent, tone, durationSeconds: duration }

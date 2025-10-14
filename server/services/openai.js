@@ -50,7 +50,7 @@ If no story-worthy content is found, return: {"stories": []}
   }
 };
 
-const refineStory = async (storyContent, tone = 'casual', duration = 30) => {
+const refineStory = async (storyContent, tone = 'casual', duration = 30, notes = '') => {
   try {
     const toneInstructions = {
       'casual': 'Write in a casual, conversational tone like you\'re talking to a friend',
@@ -71,6 +71,11 @@ Constraints:
 - Show, don't tell: add concrete sensory details and a moment of tension/surprise.
 - Include a brief reflective payoff or insight at the end.
 - Keep it natural and easy to tell out loud.
+
+User preferences to honor (if any):
+"""
+${notes}
+"""
 
 Original story:
 """

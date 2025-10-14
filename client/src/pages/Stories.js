@@ -12,6 +12,7 @@ const Stories = () => {
   const [selectedStory, setSelectedStory] = useState(null);
   const [isImprovingStory, setIsImprovingStory] = useState(false);
   const [improvedStory, setImprovedStory] = useState(null);
+  const [refineControls, setRefineControls] = useState({ tone: 'funny', duration: 45, notes: '' });
   const [newStory, setNewStory] = useState({
     title: '',
     content: '',
@@ -113,7 +114,11 @@ const Stories = () => {
     
     setIsImprovingStory(true);
     try {
-      const res = await storiesAPI.refineStory(selectedStory.id, { tone: 'funny', duration: 45 });
+      const res = await storiesAPI.refineStory(selectedStory.id, { 
+        tone: refineControls.tone || 'casual', 
+        duration: Number(refineControls.duration) || 30,
+        notes: refineControls.notes || ''
+      });
       const s = res.data.story;
       const improved = {
         title: s.title,
@@ -404,6 +409,38 @@ const Stories = () => {
 
               {/* Modal Actions */}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm text-gray-700">Tone</label>
+                  <select
+                    value={refineControls.tone}
+                    onChange={(e)=>setRefineControls(prev=>({ ...prev, tone: e.target.value }))}
+                    className="px-2 py-1 border rounded"
+                  >
+                    {['casual','funny','thoughtful','self-deprecating','dramatic'].map(t=>(
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <label className="text-sm text-gray-700">Duration (sec)</label>
+                  <input
+                    type="number"
+                    min={15}
+                    max={120}
+                    value={refineControls.duration}
+                    onChange={(e)=>setRefineControls(prev=>({ ...prev, duration: e.target.value }))}
+                    className="w-20 px-2 py-1 border rounded"
+                  />
+                </div>
+
+                <div className="flex-1 mx-4">
+                  <textarea
+                    placeholder="What to change? What you liked/disliked…"
+                    value={refineControls.notes}
+                    onChange={(e)=>setRefineControls(prev=>({ ...prev, notes: e.target.value }))}
+                    rows={2}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+
                 <button
                   onClick={handleImproveStory}
                   disabled={isImprovingStory}
