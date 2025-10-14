@@ -110,6 +110,18 @@ const Coach = () => {
     );
   }
 
+  const steps = [
+    { key: 'situation', label: 'Situation (when/where/with whom?)', placeholder: 'Describe the situation briefly' },
+    { key: 'automaticThought', label: 'Automatic thought', placeholder: 'What went through your mind?' },
+    { key: 'emotions', label: 'Emotions (and intensity 0–100)', placeholder: 'e.g., Anxiety 70, Embarrassment 40' },
+    { key: 'evidenceFor', label: 'Evidence supporting the thought', placeholder: 'Facts that support the thought' },
+    { key: 'evidenceAgainst', label: 'Evidence against the thought', placeholder: 'Facts that don’t fit the thought' },
+    { key: 'balancedThought', label: 'Balanced alternative thought', placeholder: 'A more accurate/helpful way to see this' },
+    { key: 'postSeverity', label: 'Re‑rate emotion (0–100) after reframing', placeholder: 'e.g., Anxiety 35' }
+  ];
+
+  const step = steps[Math.min(stepIdx, steps.length - 1)];
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
@@ -173,14 +185,75 @@ const Coach = () => {
           </div>
         )}
       </div>
+
+      {worksheetOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">CBT Thought Record</h2>
+              <p className="text-sm text-gray-500 mt-1">Issue: {activeIssue?.theme} • “{activeIssue?.span_text}”</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="text-sm text-gray-500">Step {stepIdx + 1} of {steps.length}</div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{step.label}</label>
+              {step.key === 'postSeverity' ? (
+                <input
+                  type="text"
+                  value={record.postSeverity}
+                  onChange={(e)=>setRecord(prev=>({ ...prev, postSeverity: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder={step.placeholder}
+                />
+              ) : (
+                <textarea
+                  rows={4}
+                  value={record[step.key]}
+                  onChange={(e)=>setRecord(prev=>({ ...prev, [step.key]: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder={step.placeholder}
+                />
+              )}
+              <div className="flex items-center justify-between pt-4">
+                <button
+                  onClick={closeWorksheet}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <div className="space-x-2">
+                  <button
+                    onClick={()=>setStepIdx(i=>Math.max(0, i-1))}
+                    className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
+                    disabled={stepIdx===0}
+                  >
+                    Back
+                  </button>
+                  {stepIdx < steps.length - 1 ? (
+                    <button
+                      onClick={()=>setStepIdx(i=>Math.min(steps.length-1, i+1))}
+                      className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
+                    >
+                      Next
+                    </button>
+                  ) : (
+                    <button
+                      onClick={finishWorksheet}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Coach;
-
-// Worksheet Modal (inline to keep file simple)
-// Using a simple stepped form for a CBT thought record
 
 
 
