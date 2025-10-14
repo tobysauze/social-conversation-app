@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../prisma/client');
+const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -52,37 +53,70 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
+    let user = null;
+    let usedSQLiteFallback = false;
+
+    // Try Prisma/Postgres first
+    try {
+      user = await prisma.user.findFirst({ where: { name: username } });
+    } catch (e) {
+      usedSQLiteFallback = true;
+    }
+
+    // Fallback to bundled SQLite if Prisma is unavailable (e.g., no DATABASE_URL/migrations yet)
+    if (usedSQLiteFallback) {
       try {
-        const user = await prisma.user.findFirst({ where: { name: username } });
+        const db = getDatabase();
+        user = await new Promise((resolve, reject) => {
+          db.get(
+            'SELECT id, email, name, password_hash FROM users WHERE name = ?',
+            [username],
+            (err, row) => {
+              if (err) return reject(err);
+              resolve(row || null);
+            }
+          );
+        });
 
-        if (!user) {
-          return res.status(401).json({ error: 'Invalid credentials' });
-        }
+        if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
-        const isValidPassword = await bcrypt.compare(password, user.password);
-        if (!isValidPassword) {
-          return res.status(401).json({ error: 'Invalid credentials' });
-        }
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) return res.status(401).json({ error: 'Invalid credentials' });
 
-        // Generate JWT token
         const token = jwt.sign(
           { userId: user.id, email: user.email },
           process.env.JWT_SECRET,
           { expiresIn: '7d' }
         );
 
-        res.json({
+        return res.json({
           message: 'Login successful',
           token,
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name
-          }
+          user: { id: user.id, email: user.email, name: user.name }
         });
-      } catch (err) {
+      } catch (fallbackErr) {
+        console.error('SQLite fallback login error:', fallbackErr);
         return res.status(500).json({ error: 'Database error' });
       }
+    }
+
+    // Prisma path (Postgres)
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: { id: user.id, email: user.email, name: user.name }
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });

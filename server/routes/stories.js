@@ -24,7 +24,7 @@ router.get('/', authenticateToken, async (req, res) => {
       content: s.content,
       tone: s.tone,
       duration_seconds: s.durationSeconds,
-      tags: s.tags,
+      tags: s.tags ? (typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags) : [],
       times_told: s.timesTold,
       success_rating: s.successRating,
       created_at: s.createdAt,
@@ -50,7 +50,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       content: story.content,
       tone: story.tone,
       duration_seconds: story.durationSeconds,
-      tags: story.tags,
+      tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
       times_told: story.timesTold,
       success_rating: story.successRating,
       created_at: story.createdAt,
@@ -133,7 +133,7 @@ router.post('/', authenticateToken, async (req, res) => {
         content: story.content,
         tone: story.tone,
         duration_seconds: story.durationSeconds,
-        tags: story.tags,
+        tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
         times_told: story.timesTold,
         success_rating: story.successRating,
         created_at: story.createdAt,
@@ -154,37 +154,36 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { tone = 'casual', duration = 30 } = req.body;
-    const db = null;
 
-    // Get the story
-    db.get(
-      'SELECT * FROM stories WHERE id = ? AND user_id = ?',
-      [id, req.user.userId],
-      async (err, story) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+    // Load via Prisma
+    const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!story) return res.status(404).json({ error: 'Story not found' });
 
-        if (!story) {
-          return res.status(404).json({ error: 'Story not found' });
-        }
-
-        try {
-          // Refine the story using OpenAI
-          const refinedContent = await refineStory(story.content, tone, duration);
-          
-          // Update the story in database
-          const updatedStory = await prisma.story.update({
-            where: { id: Number(id) },
-            data: { content: refinedContent, tone, durationSeconds: duration }
-          });
-          res.json({ story: updatedStory });
-        } catch (error) {
-          console.error('Story refinement error:', error);
-          res.status(500).json({ error: 'Failed to refine story' });
-        }
-      }
-    );
+    try {
+      const refinedContent = await refineStory(story.content, tone, duration);
+      const updated = await prisma.story.update({
+        where: { id: Number(id) },
+        data: { content: refinedContent, tone, durationSeconds: duration }
+      });
+      const legacy = {
+        id: updated.id,
+        user_id: updated.userId,
+        journal_entry_id: updated.journalEntryId,
+        title: updated.title,
+        content: updated.content,
+        tone: updated.tone,
+        duration_seconds: updated.durationSeconds,
+        tags: updated.tags,
+        times_told: updated.timesTold,
+        success_rating: updated.successRating,
+        created_at: updated.createdAt,
+        updated_at: updated.updatedAt
+      };
+      return res.json({ story: legacy });
+    } catch (err) {
+      console.error('Story refinement error:', err);
+      return res.status(500).json({ error: 'Failed to refine story' });
+    }
   } catch (error) {
     console.error('Refine story error:', error);
     res.status(500).json({ error: 'Internal server error' });

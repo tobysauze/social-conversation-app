@@ -106,7 +106,8 @@ export const peopleAPI = {
     tagPerson: (jokeId, personId) => api.post(`/jokes/${jokeId}/tag-person/${personId}`),
     untagPerson: (jokeId, personId) => api.delete(`/jokes/${jokeId}/tag-person/${personId}`),
     getJokesForPerson: (personId) => api.get(`/jokes/person/${personId}`),
-    iterateJoke: (jokeId, conversationHistory) => api.post(`/jokes/${jokeId}/iterate`, { conversationHistory })
+    iterateJoke: (jokeId, conversationHistory) => api.post(`/jokes/${jokeId}/iterate`, { conversationHistory }),
+    categorize: (jokeId) => api.post(`/jokes/${jokeId}/categorize`)
   };
 
 // Wellness API
@@ -120,6 +121,13 @@ export const wellnessAPI = {
   upsert: (data) => api.post('/wellness', data),
   remove: (id) => api.delete(`/wellness/${id}`),
   correlations: () => api.get('/wellness/correlations')
+};
+
+// Coach API
+export const coachAPI = {
+  scanJournal: (journalId, content) => api.post(`/coach/scan/${journalId}`, { content }),
+  listIssues: () => api.get('/coach/issues'),
+  updateIssue: (id, data) => api.patch(`/coach/issues/${id}`, data)
 };
 
 export default api;

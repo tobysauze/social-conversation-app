@@ -1,7 +1,7 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
-const { generateJoke, iterateJoke } = require('../services/openai');
+const { generateJoke, iterateJoke, categorizeJoke } = require('../services/openai');
 
 const router = express.Router();
 
@@ -284,6 +284,48 @@ router.post('/:jokeId/iterate', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error iterating joke:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Auto-categorize a joke using AI and persist primary category + taxonomy metadata (notes)
+router.post('/:id/categorize', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const joke = await prisma.joke.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!joke) return res.status(404).json({ error: 'Joke not found' });
+
+    const classification = await categorizeJoke(joke.content);
+
+    // Persist the primary category; append taxonomy info to notes for now
+    const newNotes = (() => {
+      const info = `Taxonomy: ${classification.taxonomy_matches?.join(', ') || '—'} | Theories: ${classification.comedy_theories?.join(', ') || '—'}`;
+      if (!joke.notes) return info;
+      // Avoid duplicating if already present
+      return joke.notes.includes('Taxonomy:') ? joke.notes : `${joke.notes}\n${info}`;
+    })();
+
+    const updated = await prisma.joke.update({
+      where: { id: Number(id) },
+      data: { category: classification.primary_category, notes: newNotes }
+    });
+
+    return res.json({
+      message: 'Joke categorized',
+      category: classification.primary_category,
+      taxonomy_matches: classification.taxonomy_matches,
+      comedy_theories: classification.comedy_theories,
+      joke: {
+        id: updated.id,
+        title: updated.title,
+        content: updated.content,
+        category: updated.category,
+        difficulty: updated.difficulty,
+        notes: updated.notes
+      }
+    });
+  } catch (e) {
+    console.error('Error categorizing joke:', e);
+    res.status(500).json({ error: 'Failed to categorize joke' });
   }
 });
 

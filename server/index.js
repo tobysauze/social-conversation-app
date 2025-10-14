@@ -12,6 +12,8 @@ const peopleRoutes = require('./routes/people');
 const jokesRoutes = require('./routes/jokes');
 const adminRoutes = require('./routes/admin');
 const wellnessRoutes = require('./routes/wellness');
+const ingestRoutes = require('./routes/ingest');
+const coachRoutes = require('./routes/coach');
 // Prisma client (Postgres)
 let prisma = null;
 try {
@@ -80,6 +82,8 @@ app.use('/api/people', peopleRoutes);
 app.use('/api/jokes', jokesRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/wellness', wellnessRoutes);
+app.use('/api/ingest', ingestRoutes);
+app.use('/api/coach', coachRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

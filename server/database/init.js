@@ -192,6 +192,20 @@ const initDatabase = () => {
       )
     `);
 
+    // Apple Health raw intake events
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS health_intake_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        source TEXT, -- e.g., apple_health_shortcut
+        event_type TEXT, -- daily_summary, workout, sleep, etc.
+        event_date TEXT, -- ISO date (YYYY-MM-DD) for grouping
+        payload_json TEXT NOT NULL, -- raw JSON payload as received
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+      )
+    `);
+
     console.log('✅ Database tables created successfully');
     return Promise.resolve();
   } catch (error) {

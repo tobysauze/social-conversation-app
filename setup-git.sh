@@ -31,3 +31,5 @@ echo "3. Follow the DEPLOYMENT.md guide to deploy to Vercel and Railway"
 echo ""
 echo "🎉 Your app will be accessible from any device once deployed!"
 
+
+

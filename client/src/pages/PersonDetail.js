@@ -37,6 +37,20 @@ const PersonDetail = () => {
   const [newJoke, setNewJoke] = useState({ title: '', content: '' });
   const [addingJoke, setAddingJoke] = useState(false);
 
+  const coerceToArray = (value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (_) {}
+      // Fallback: split by comma if it looks like a comma-separated list
+      if (value.includes(',')) return value.split(',').map(v => v.trim()).filter(Boolean);
+      return value ? [value] : [];
+    }
+    return [];
+  };
+
   const formatDateSafe = (value) => {
     if (!value) return 'Unknown';
     const d = new Date(value);
@@ -75,11 +89,11 @@ const PersonDetail = () => {
       // Backend already parses JSON fields, just ensure dates are valid
       const parsedPerson = {
         ...personData,
-        // Normalize array fields to always be arrays
-        interests: Array.isArray(personData.interests) ? personData.interests : [],
-        personality_traits: Array.isArray(personData.personality_traits) ? personData.personality_traits : [],
-        shared_experiences: Array.isArray(personData.shared_experiences) ? personData.shared_experiences : [],
-        story_preferences: Array.isArray(personData.story_preferences) ? personData.story_preferences : [],
+        // Normalize array fields to always be arrays (handle accidental stringified arrays)
+        interests: coerceToArray(personData.interests),
+        personality_traits: coerceToArray(personData.personality_traits),
+        shared_experiences: coerceToArray(personData.shared_experiences),
+        story_preferences: coerceToArray(personData.story_preferences),
         // Ensure dates are valid
         created_at: personData.created_at || new Date().toISOString(),
         updated_at: personData.updated_at || new Date().toISOString()
