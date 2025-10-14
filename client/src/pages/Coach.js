@@ -9,6 +9,18 @@ const Coach = () => {
   const [scanning, setScanning] = useState(false);
   const [journalEntries, setJournalEntries] = useState([]);
   const [selectedEntryId, setSelectedEntryId] = useState('');
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
+  const [activeIssue, setActiveIssue] = useState(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [record, setRecord] = useState({
+    situation: '',
+    automaticThought: '',
+    emotions: '',
+    evidenceFor: '',
+    evidenceAgainst: '',
+    balancedThought: '',
+    postSeverity: ''
+  });
 
   useEffect(() => {
     const load = async () => {
@@ -50,6 +62,43 @@ const Coach = () => {
       toast.error('Scan failed');
     } finally {
       setScanning(false);
+    }
+  };
+
+  const openWorksheet = (issue) => {
+    setActiveIssue(issue);
+    setWorksheetOpen(true);
+    setStepIdx(0);
+    setRecord({
+      situation: '',
+      automaticThought: issue?.span_text || '',
+      emotions: '',
+      evidenceFor: '',
+      evidenceAgainst: '',
+      balancedThought: '',
+      postSeverity: String(Math.max(0, (issue?.severity ?? 5) - 2))
+    });
+  };
+
+  const closeWorksheet = () => {
+    setWorksheetOpen(false);
+    setActiveIssue(null);
+  };
+
+  const finishWorksheet = async () => {
+    if (!activeIssue) return;
+    try {
+      await coachAPI.updateIssue(activeIssue.id, {
+        status: 'completed',
+        severity: Number(record.postSeverity) || 0
+      });
+      const refreshed = await coachAPI.listIssues();
+      setIssues(refreshed.data.issues || []);
+      toast.success('Worksheet saved');
+      closeWorksheet();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save');
     }
   };
 
@@ -112,9 +161,13 @@ const Coach = () => {
                     {(issue.suggested_techniques||[]).map((t,i)=>(<span key={i} className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full">{t}</span>))}
                   </div>
                 </div>
-                <button className="text-primary-600 hover:text-primary-700 flex items-center text-sm">
-                  Work through <ChevronRight className="w-4 h-4 ml-1" />
-                </button>
+                {issue.status !== 'open' ? (
+                  <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">Completed</span>
+                ) : (
+                  <button onClick={()=>openWorksheet(issue)} className="text-primary-600 hover:text-primary-700 flex items-center text-sm">
+                    Work through <ChevronRight className="w-4 h-4 ml-1" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -125,5 +178,9 @@ const Coach = () => {
 };
 
 export default Coach;
+
+// Worksheet Modal (inline to keep file simple)
+// Using a simple stepped form for a CBT thought record
+
 
 
