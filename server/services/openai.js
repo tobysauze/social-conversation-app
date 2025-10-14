@@ -61,25 +61,29 @@ const refineStory = async (storyContent, tone = 'casual', duration = 30) => {
     };
 
     const prompt = `
-Transform this story into a ${duration}-second conversational anecdote with a ${tone} tone.
+You are a master storytelling coach. Rewrite the user's story so it is significantly more engaging, emotionally resonant, and vivid while keeping the same core essence and key beats.
 
-Original story: "${storyContent}"
-
-Instructions:
+Constraints:
+- Output must be a fresh rewrite, not a copy, with noticeably different wording and improved structure.
 - ${toneInstructions[tone] || toneInstructions['casual']}
-- Keep it to about ${duration} seconds when spoken (roughly ${Math.floor(duration * 2.5)} words)
-- Make it engaging and relatable
-- Include a clear beginning, middle, and end
-- Add conversational elements like "So..." or "You know what's funny?"
-- Make it sound natural when spoken aloud
+- Aim for about ${duration} seconds when spoken (~${Math.floor(duration * 2.5)} words).
+- Use a strong hook in the first 1-2 sentences.
+- Show, don't tell: add concrete sensory details and a moment of tension/surprise.
+- Include a brief reflective payoff or insight at the end.
+- Keep it natural and easy to tell out loud.
 
-Return only the refined story text, no additional formatting.
+Original story:
+"""
+${storyContent}
+"""
+
+Return ONLY the rewritten story text, no preface or explanation.
 `;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.8,
+      temperature: 0.9,
       max_tokens: 300,
     });
 
@@ -515,6 +519,136 @@ Make sure the improved joke is genuinely funnier and more polished than the orig
   }
 };
 
+// Classify a joke using a rich taxonomy, and also map to a primary app category
+const categorizeJoke = async (jokeText) => {
+  try {
+    // App-supported primary categories for storage/filters
+    const primaryCategories = [
+      'pun',
+      'one-liner',
+      'story',
+      'observational',
+      'wordplay',
+      'situational',
+      'general'
+    ];
+
+    // Full taxonomy list (condensed from user-provided taxonomy)
+    const taxonomy = [
+      'Puns', 'Malapropisms', 'Spoonerisms', 'Double entendre', 'Nonsense/Absurd phrasing',
+      'One-liners', 'Set-up and punchline', 'Callbacks', 'Anti-jokes', 'Meta-humor',
+      'Slapstick/Physical comedy', 'Situational comedy', 'Farce', 'Improvisational humor',
+      'Satire', 'Parody', 'Irony', 'Sarcasm', 'Self-deprecating humor', 'Dark/gallows humor',
+      'Incongruity', 'Surreal/absurdist humor', 'Shock humor', 'Blue humor', 'Deadpan',
+      'Observational humor', 'Ethnic/cultural jokes', 'Generational humor', 'Inside jokes', 'Stereotype/character archetypes',
+      'Practical jokes/pranks', 'Improvised banter', 'Meme humor', 'Pun chains/escalation'
+    ];
+
+    const prompt = `You are a comedy taxonomy classifier.
+
+Classify the following joke text into:
+1) primary_category: ONE of [${primaryCategories.join(', ')}] that best matches for a general app filter.
+2) taxonomy_matches: the top 3 most specific categories from this taxonomy list (strings only): [${taxonomy.join(', ')}].
+3) comedy_theories: zero or more of [Incongruity, Superiority, Relief].
+
+Joke:
+"""
+${jokeText}
+"""
+
+Return STRICT JSON only (no markdown), like:
+{
+  "primary_category": "one-liner",
+  "taxonomy_matches": ["One-liners", "Irony", "Deadpan"],
+  "comedy_theories": ["Incongruity"]
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 400
+    });
+
+    let content = response.choices[0].message.content.trim();
+    if (content.startsWith('```')) {
+      content = content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+    }
+    const parsed = JSON.parse(content);
+
+    // Normalize out-of-set primary categories
+    if (!primaryCategories.includes(parsed.primary_category)) {
+      // Simple heuristics mapping
+      const text = (parsed.primary_category || '').toLowerCase();
+      let mapped = 'general';
+      if (text.includes('pun') || text.includes('wordplay')) mapped = 'pun';
+      else if (text.includes('one')) mapped = 'one-liner';
+      else if (text.includes('observ')) mapped = 'observational';
+      else if (text.includes('situat') || text.includes('slapstick') || text.includes('farce')) mapped = 'situational';
+      else if (text.includes('story')) mapped = 'story';
+      else if (text.includes('word')) mapped = 'wordplay';
+      parsed.primary_category = mapped;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error('Error categorizing joke:', error);
+    return {
+      primary_category: 'general',
+      taxonomy_matches: [],
+      comedy_theories: []
+    };
+  }
+};
+
+// Analyze a journal entry for CBT-relevant issues and suggest techniques
+const analyzeJournalForCBTIssues = async (journalContent) => {
+  try {
+    const prompt = `You are a careful, supportive CBT coach. Analyze the user's journal entry and extract potential issues suitable for CBT/ACT-style coaching. Do not provide diagnosis.
+
+Return STRICT JSON with this schema:
+{
+  "issues": [
+    {
+      "theme": string,  // e.g., social anxiety, self-criticism, procrastination
+      "cognitive_distortions": string[], // e.g., mind-reading, catastrophizing
+      "severity": number,  // 0-10
+      "confidence": number, // 0-1
+      "span_text": string,  // direct quote
+      "span_start": number,
+      "span_end": number,
+      "goal": string,  // user's desired outcome in their own words if evident
+      "suggested_techniques": ["thought_record", "socratic_questioning", "behavioral_activation", "reframing"],
+      "tags": string[]
+    }
+  ]
+}
+
+Journal entry:
+"""
+${journalContent}
+"""`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 900
+    });
+
+    let content = response.choices[0].message.content.trim();
+    if (content.startsWith('```')) {
+      content = content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+    }
+    const parsed = JSON.parse(content);
+    if (!parsed || !Array.isArray(parsed.issues)) return { issues: [] };
+    return parsed;
+  } catch (error) {
+    console.error('Error analyzing CBT issues:', error);
+    return { issues: [] };
+  }
+};
+
 module.exports = {
   extractStories,
   refineStory,
@@ -523,5 +657,7 @@ module.exports = {
   getStoryRecommendations,
   analyzeJournalForPeopleInsights,
   generateJoke,
-  iterateJoke
+  iterateJoke,
+  categorizeJoke,
+  analyzeJournalForCBTIssues
 };

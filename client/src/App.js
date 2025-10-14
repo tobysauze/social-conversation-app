@@ -14,6 +14,7 @@ import People from './pages/People';
 import PersonDetail from './pages/PersonDetail';
 import Jokes from './pages/Jokes';
 import Wellness from './pages/Wellness';
+import Coach from './pages/Coach';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -136,6 +137,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/coach" 
+            element={
+              <ProtectedRoute>
+                <Coach />
               </ProtectedRoute>
             } 
           />

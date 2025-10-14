@@ -33,6 +33,7 @@ const Jokes = () => {
   const [selectedJokeId, setSelectedJokeId] = useState(null);
   const [showIterationModal, setShowIterationModal] = useState(false);
   const [selectedJokeForIteration, setSelectedJokeForIteration] = useState(null);
+  const [categorizingId, setCategorizingId] = useState(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -225,6 +226,20 @@ const Jokes = () => {
     });
   };
 
+  const handleCategorize = async (jokeId) => {
+    try {
+      setCategorizingId(jokeId);
+      const res = await jokesAPI.categorize(jokeId);
+      toast.success(`Categorized as ${res.data.category}`);
+      loadJokes();
+    } catch (e) {
+      console.error('Categorize failed', e);
+      toast.error('Failed to categorize');
+    } finally {
+      setCategorizingId(null);
+    }
+  };
+
   const filteredJokes = jokes.filter(joke => {
     const matchesSearch = joke.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          joke.content.toLowerCase().includes(searchTerm.toLowerCase());
@@ -363,6 +378,18 @@ const Jokes = () => {
                     <Bot className="w-4 h-4" />
                   </button>
                   <button
+                    onClick={() => handleCategorize(joke.id)}
+                    disabled={categorizingId === joke.id}
+                    className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900 rounded-lg transition-colors"
+                    title="Auto-categorize with AI"
+                  >
+                    {categorizingId === joke.id ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                  </button>
+                  <button
                     onClick={() => handleTagPerson(joke.id)}
                     className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900 rounded-lg transition-colors"
                     title="Tag to person"
@@ -391,6 +418,13 @@ const Jokes = () => {
                   {joke.content}
                 </p>
               </div>
+
+              {/* Show taxonomy/theory hints embedded in notes */}
+              {joke.notes && joke.notes.includes('Taxonomy:') && (
+                <div className="mb-3 text-xs text-gray-600 dark:text-gray-400">
+                  {joke.notes.split('\n').slice(-1)[0]}
+                </div>
+              )}
 
               <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                 <div className="flex items-center space-x-4">

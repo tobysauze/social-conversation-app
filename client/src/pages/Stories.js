@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Search, Filter, X, Save, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { storiesAPI } from '../services/api';
 
 const Stories = () => {
   const [stories, setStories] = useState([]);
@@ -19,24 +20,25 @@ const Stories = () => {
   const [tagInput, setTagInput] = useState('');
 
   useEffect(() => {
-    // Mock data for now
-    setStories([
-      {
-        id: 1,
-        title: "Coffee Shop Encounter",
-        content: "I met someone interesting at the local coffee shop today...",
-        createdAt: new Date().toISOString(),
-        tags: ["social", "coffee", "conversation"]
-      },
-      {
-        id: 2,
-        title: "Grocery Store Chat",
-        content: "Had a nice conversation with a fellow shopper about cooking...",
-        createdAt: new Date().toISOString(),
-        tags: ["cooking", "grocery", "small-talk"]
+    const load = async () => {
+      try {
+        const res = await storiesAPI.getStories();
+        const list = (res.data.stories || []).map(s => ({
+          id: s.id,
+          title: s.title,
+          content: s.content,
+          createdAt: s.created_at || s.createdAt,
+          tags: Array.isArray(s.tags) ? s.tags : (typeof s.tags === 'string' && s.tags.startsWith('[') ? JSON.parse(s.tags) : (s.tags ? [s.tags] : []))
+        }));
+        setStories(list);
+      } catch (e) {
+        console.error('Failed to load stories', e);
+        toast.error('Failed to load stories');
+      } finally {
+        setLoading(false);
       }
-    ]);
-    setLoading(false);
+    };
+    load();
   }, []);
 
   const filteredStories = stories.filter(story =>
@@ -71,23 +73,28 @@ const Stories = () => {
     });
   };
 
-  const handleSaveStory = () => {
+  const handleSaveStory = async () => {
     if (!newStory.title.trim() || !newStory.content.trim()) {
       toast.error('Please fill in both title and content');
       return;
     }
-
-    const story = {
-      id: Date.now(), // Simple ID generation for now
-      title: newStory.title,
-      content: newStory.content,
-      tags: newStory.tags,
-      createdAt: new Date().toISOString()
-    };
-
-    setStories([story, ...stories]);
-    toast.success('Story saved successfully!');
-    handleCloseModal();
+    try {
+      const res = await storiesAPI.createStory({ title: newStory.title, content: newStory.content, tone: 'casual', duration_seconds: 30, tags: newStory.tags });
+      const s = res.data.story;
+      const created = {
+        id: s.id,
+        title: s.title,
+        content: s.content,
+        createdAt: s.created_at || s.createdAt,
+        tags: Array.isArray(s.tags) ? s.tags : (typeof s.tags === 'string' && s.tags.startsWith('[') ? JSON.parse(s.tags) : (s.tags ? [s.tags] : []))
+      };
+      setStories([created, ...stories]);
+      toast.success('Story saved successfully!');
+      handleCloseModal();
+    } catch (e) {
+      console.error('Create story failed', e);
+      toast.error('Failed to save story');
+    }
   };
 
   const handleViewStory = (story) => {
