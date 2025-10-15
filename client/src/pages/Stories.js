@@ -13,6 +13,8 @@ const Stories = () => {
   const [isImprovingStory, setIsImprovingStory] = useState(false);
   const [improvedStory, setImprovedStory] = useState(null);
   const [refineControls, setRefineControls] = useState({ tone: 'funny', duration: 45, notes: '' });
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [promptText, setPromptText] = useState('');
   const [newStory, setNewStory] = useState({
     title: '',
     content: '',
@@ -439,6 +441,35 @@ const Stories = () => {
                     rows={2}
                     className="w-full px-3 py-2 border rounded"
                   />
+                  <div className="mt-2 flex items-center gap-3 text-sm">
+                    <button
+                      type="button"
+                      className="px-3 py-1 border rounded"
+                      onClick={async ()=>{
+                        try {
+                          const res = await storiesAPI.previewRefinePrompt(selectedStory.id, {
+                            tone: refineControls.tone,
+                            duration: Number(refineControls.duration) || 30,
+                            notes: refineControls.notes
+                          });
+                          setPromptText(res.data.prompt || '');
+                          setShowPrompt(true);
+                        } catch (e) {
+                          console.error(e);
+                          setPromptText('');
+                          setShowPrompt(true);
+                        }
+                      }}
+                    >
+                      Preview prompt
+                    </button>
+                    {showPrompt && (
+                      <button type="button" className="text-gray-600 underline" onClick={()=>setShowPrompt(false)}>Hide prompt</button>
+                    )}
+                  </div>
+                  {showPrompt && (
+                    <pre className="mt-2 p-3 bg-gray-50 border rounded text-xs whitespace-pre-wrap max-h-60 overflow-auto">{promptText || 'No prompt available.'}</pre>
+                  )}
                 </div>
 
                 <button
