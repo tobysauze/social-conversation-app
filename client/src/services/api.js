@@ -132,4 +132,17 @@ export const coachAPI = {
   updateIssue: (id, data) => api.patch(`/coach/issues/${id}`, data)
 };
 
+// Identity & Goals API
+export const identityAPI = {
+  get: () => api.get('/identity'),
+  save: (data) => api.post('/identity', data)
+};
+
+export const goalsAPI = {
+  list: () => api.get('/goals'),
+  create: (data) => api.post('/goals', data),
+  update: (id, data) => api.patch(`/goals/${id}`, data),
+  remove: (id) => api.delete(`/goals/${id}`)
+};
+
 export default api;

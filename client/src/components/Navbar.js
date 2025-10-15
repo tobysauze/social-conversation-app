@@ -13,7 +13,8 @@ import {
   Users,
   Laugh,
   Heart,
-  Brain
+  Brain,
+  Target as TargetIcon
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -29,7 +30,9 @@ const Navbar = () => {
     { name: 'People', href: '/people', icon: Users },
     { name: 'Jokes', href: '/jokes', icon: Laugh },
     { name: 'Wellness', href: '/wellness', icon: Heart },
-    { name: 'Coach', href: '/coach', icon: Brain }
+    { name: 'Coach', href: '/coach', icon: Brain },
+    { name: 'Identity', href: '/identity', icon: User },
+    { name: 'Goals', href: '/goals', icon: TargetIcon }
   ];
 
   const isActive = (path) => location.pathname === path;
