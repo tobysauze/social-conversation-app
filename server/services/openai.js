@@ -50,17 +50,16 @@ If no story-worthy content is found, return: {"stories": []}
   }
 };
 
-const refineStory = async (storyContent, tone = 'casual', duration = 30, notes = '') => {
-  try {
-    const toneInstructions = {
-      'casual': 'Write in a casual, conversational tone like you\'re talking to a friend',
-      'funny': 'Make it humorous and entertaining, with light jokes or observations',
-      'thoughtful': 'Write in a reflective, insightful tone that shows depth',
-      'self-deprecating': 'Include gentle self-deprecating humor that\'s endearing',
-      'dramatic': 'Add some dramatic flair and storytelling elements'
-    };
+const buildRefinePrompt = (storyContent, tone = 'casual', duration = 30, notes = '') => {
+  const toneInstructions = {
+    'casual': 'Write in a casual, conversational tone like you\'re talking to a friend',
+    'funny': 'Make it humorous and entertaining, with light jokes or observations',
+    'thoughtful': 'Write in a reflective, insightful tone that shows depth',
+    'self-deprecating': 'Include gentle self-deprecating humor that\'s endearing',
+    'dramatic': 'Add some dramatic flair and storytelling elements'
+  };
 
-    const prompt = `
+  const prompt = `
 You are a master storytelling coach. Rewrite the user's story so it is significantly more engaging, emotionally resonant, and vivid while keeping the same core essence and key beats.
 
 Constraints:
@@ -84,6 +83,12 @@ ${storyContent}
 
 Return ONLY the rewritten story text, no preface or explanation.
 `;
+  return prompt;
+};
+
+const refineStory = async (storyContent, tone = 'casual', duration = 30, notes = '') => {
+  try {
+    const prompt = buildRefinePrompt(storyContent, tone, duration, notes);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
@@ -657,6 +662,7 @@ ${journalContent}
 module.exports = {
   extractStories,
   refineStory,
+  buildRefinePrompt,
   generateConversationStarters,
   practiceFeedback,
   getStoryRecommendations,

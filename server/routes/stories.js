@@ -2,7 +2,7 @@ const express = require('express');
 const { prisma } = require('../prisma/client');
 const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
-const { extractStories, refineStory, generateConversationStarters } = require('../services/openai');
+const { extractStories, refineStory, generateConversationStarters, buildRefinePrompt } = require('../services/openai');
 
 const router = express.Router();
 
@@ -245,6 +245,11 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
     if (!story) return res.status(404).json({ error: 'Story not found' });
 
     try {
+      // Allow preview of prompt without sending to LLM
+      if (req.query.preview === 'prompt') {
+        const prompt = buildRefinePrompt(story.content, tone, duration, notes);
+        return res.json({ prompt });
+      }
       const refinedContent = await refineStory(story.content, tone, duration, notes);
       const updated = await prisma.story.update({
         where: { id: Number(id) },
