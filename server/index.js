@@ -16,6 +16,7 @@ const ingestRoutes = require('./routes/ingest');
 const coachRoutes = require('./routes/coach');
 const identityRoutes = require('./routes/identity');
 const goalsRoutes = require('./routes/goals');
+const wellnessImportRoutes = require('./routes/wellness_import');
 // Prisma client (Postgres)
 let prisma = null;
 try {
@@ -88,6 +89,7 @@ app.use('/api/ingest', ingestRoutes);
 app.use('/api/coach', coachRoutes);
 app.use('/api/identity', identityRoutes);
 app.use('/api/goals', goalsRoutes);
+app.use('/api/wellness-import', wellnessImportRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
