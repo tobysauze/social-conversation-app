@@ -244,13 +244,32 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
     const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
     if (!story) return res.status(404).json({ error: 'Story not found' });
 
+    // Fetch all existing stories for this user to use as style examples
+    let existingStories = [];
+    try {
+      const allStories = await prisma.story.findMany({
+        where: { userId: req.user.userId },
+        orderBy: { createdAt: 'desc' },
+        take: 10, // Limit to most recent 10 to avoid token bloat
+        select: { title: true, content: true }
+      });
+      existingStories = allStories.filter(s => s.id !== Number(id)); // Exclude current story
+    } catch (pgErr) {
+      // Fallback to SQLite
+      const db = getDatabase();
+      const rows = db.prepare(
+        `SELECT title, content FROM stories WHERE user_id = ? AND id != ? ORDER BY created_at DESC LIMIT 10`
+      ).all(req.user.userId, Number(id));
+      existingStories = rows;
+    }
+
     try {
       // Allow preview of prompt without sending to LLM
       if (req.query.preview === 'prompt') {
-        const prompt = buildRefinePrompt(story.content, tone, duration, notes);
+        const prompt = buildRefinePrompt(story.content, tone, duration, notes, existingStories);
         return res.json({ prompt });
       }
-      const refinedContent = await refineStory(story.content, tone, duration, notes);
+      const refinedContent = await refineStory(story.content, tone, duration, notes, existingStories);
       const updated = await prisma.story.update({
         where: { id: Number(id) },
         data: { content: refinedContent, tone, durationSeconds: duration }

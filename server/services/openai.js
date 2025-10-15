@@ -50,7 +50,16 @@ If no story-worthy content is found, return: {"stories": []}
   }
 };
 
-const buildRefinePrompt = (storyContent, tone = 'casual', duration = 30, notes = '') => {
+const buildRefinePrompt = (storyContent, tone = 'casual', duration = 30, notes = '', existingStories = []) => {
+  let styleExamples = '';
+  if (existingStories && existingStories.length > 0) {
+    styleExamples = `\n\nHere are some previous stories the user has written. Use these as STYLE EXAMPLES to match their casual, conversational tone:\n\n`;
+    existingStories.slice(0, 5).forEach((s, idx) => {
+      styleExamples += `Example ${idx + 1}: "${s.title}"\n${s.content}\n\n`;
+    });
+    styleExamples += `Notice the casual, natural, "chatting shit at a bar" style — NOT theatrical or fancy novel prose. Match this exact vibe.\n`;
+  }
+
   const prompt = `You are a skilled storyteller whose job is to create short, funny, or impressive stories designed to be told casually at a bar or pub to entertain and connect with people.
 
 Tone: Conversational, natural, confident, and slightly mischievous — like someone who's been around, seen some things, and knows how to tell a good story without trying too hard.
@@ -64,7 +73,7 @@ Goal: Make people laugh, make them curious, or make them go "no way, that's wild
 Avoid: Long exposition, too many characters, heavy topics (politics, religion, tragedy), or anything that feels like a stand-up routine. Keep it light, playful, and natural.
 
 Optional twist: Add a clever or ironic ending — something that makes people chuckle or shake their heads.
-
+${styleExamples}
 User preferences to honor (if any):
 """
 ${notes}
@@ -75,14 +84,14 @@ Original story:
 ${storyContent}
 """
 
-Rewrite this story following ALL the guidelines above. Return ONLY the rewritten story text, no preface or explanation.
+Rewrite this story following ALL the guidelines above and matching the casual, conversational style from the examples. Return ONLY the rewritten story text, no preface or explanation.
 `;
   return prompt;
 };
 
-const refineStory = async (storyContent, tone = 'casual', duration = 30, notes = '') => {
+const refineStory = async (storyContent, tone = 'casual', duration = 30, notes = '', existingStories = []) => {
   try {
-    const prompt = buildRefinePrompt(storyContent, tone, duration, notes);
+    const prompt = buildRefinePrompt(storyContent, tone, duration, notes, existingStories);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
