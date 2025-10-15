@@ -51,25 +51,19 @@ If no story-worthy content is found, return: {"stories": []}
 };
 
 const buildRefinePrompt = (storyContent, tone = 'casual', duration = 30, notes = '') => {
-  const toneInstructions = {
-    'casual': 'Write in a casual, conversational tone like you\'re talking to a friend',
-    'funny': 'Make it humorous and entertaining, with light jokes or observations',
-    'thoughtful': 'Write in a reflective, insightful tone that shows depth',
-    'self-deprecating': 'Include gentle self-deprecating humor that\'s endearing',
-    'dramatic': 'Add some dramatic flair and storytelling elements'
-  };
+  const prompt = `You are a skilled storyteller whose job is to create short, funny, or impressive stories designed to be told casually at a bar or pub to entertain and connect with people.
 
-  const prompt = `
-You are a master storytelling coach. Rewrite the user's story so it is significantly more engaging, emotionally resonant, and vivid while keeping the same core essence and key beats.
+Tone: Conversational, natural, confident, and slightly mischievous — like someone who's been around, seen some things, and knows how to tell a good story without trying too hard.
 
-Constraints:
-- Output must be a fresh rewrite, not a copy, with noticeably different wording and improved structure.
-- ${toneInstructions[tone] || toneInstructions['casual']}
-- Aim for about ${duration} seconds when spoken (~${Math.floor(duration * 2.5)} words).
-- Use a strong hook in the first 1-2 sentences.
-- Show, don't tell: add concrete sensory details and a moment of tension/surprise.
-- Include a brief reflective payoff or insight at the end.
-- Keep it natural and easy to tell out loud.
+Length: Around ${duration} seconds when spoken out loud (roughly ${Math.floor(duration * 2.5)} words).
+
+Setting: Bars or pubs — stories should sound believable and conversational, not theatrical or rehearsed. They should feel like something that might actually have happened to a friend-of-a-friend, or something that could happen to you.
+
+Goal: Make people laugh, make them curious, or make them go "no way, that's wild." The story should make the teller seem interesting, fun, and a little unpredictable — but not arrogant or fake.
+
+Avoid: Long exposition, too many characters, heavy topics (politics, religion, tragedy), or anything that feels like a stand-up routine. Keep it light, playful, and natural.
+
+Optional twist: Add a clever or ironic ending — something that makes people chuckle or shake their heads.
 
 User preferences to honor (if any):
 """
@@ -81,7 +75,7 @@ Original story:
 ${storyContent}
 """
 
-Return ONLY the rewritten story text, no preface or explanation.
+Rewrite this story following ALL the guidelines above. Return ONLY the rewritten story text, no preface or explanation.
 `;
   return prompt;
 };
