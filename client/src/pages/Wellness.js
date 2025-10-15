@@ -23,6 +23,8 @@ const Wellness = () => {
   });
   const [supp, setSupp] = useState('');
   const [med, setMed] = useState('');
+  const [dietItem, setDietItem] = useState('');
+  const [presetLoading, setPresetLoading] = useState(false);
 
   useEffect(() => {
     load();
@@ -36,6 +38,20 @@ const Wellness = () => {
       ]);
       setEntries(listRes.data.wellness || []);
       setCorrelations(corrRes.data.correlations || null);
+      // Pull preset once
+      setPresetLoading(true);
+      try {
+        const pr = await wellnessAPI.getPreset();
+        const p = pr.data.preset || { supplements: [], medication: [], diet_items: [] };
+        // initialize form stacks if empty
+        setForm(prev => ({
+          ...prev,
+          supplements: prev.supplements?.length ? prev.supplements : p.supplements,
+          medication: prev.medication?.length ? prev.medication : p.medication,
+          diet_items: prev.diet_items?.length ? prev.diet_items : p.diet_items
+        }));
+      } catch (_) {}
+      setPresetLoading(false);
     } catch (e) {
       console.error(e);
       toast.error('Failed to load wellness data');
@@ -60,6 +76,7 @@ const Wellness = () => {
         date: form.date,
         supplements: form.supplements,
         medication: form.medication,
+        diet_items: form.diet_items || [],
         diet_quality: form.diet_quality ? Number(form.diet_quality) : null,
         exercise_minutes: form.exercise_minutes ? Number(form.exercise_minutes) : 0,
         exercise_intensity: form.exercise_intensity ? Number(form.exercise_intensity) : null,
@@ -74,6 +91,20 @@ const Wellness = () => {
       toast.error('Failed to save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const savePreset = async () => {
+    try {
+      await wellnessAPI.savePreset({
+        supplements: form.supplements || [],
+        medication: form.medication || [],
+        diet_items: form.diet_items || []
+      });
+      toast.success('Defaults saved');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save defaults');
     }
   };
 
@@ -171,6 +202,24 @@ const Wellness = () => {
               ))}
             </div>
           </div>
+        </div>
+        <div className="mt-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Diet items (recurring)</label>
+          <div className="flex space-x-2 mb-2">
+            <input type="text" value={dietItem} onChange={(e)=>setDietItem(e.target.value)} className="input-field flex-1" placeholder="e.g., Oats, Coffee" />
+            <button type="button" onClick={()=>{addTo('diet_items', dietItem); setDietItem('');}} className="btn-primary">Add</button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(form.diet_items||[]).map((d,i)=>(
+              <span key={i} className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center">
+                {d}
+                <button onClick={()=>removeFrom('diet_items', i)} className="ml-2 text-green-600">×</button>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="mt-6 flex items-center justify-end">
+          <button type="button" onClick={savePreset} className="btn-secondary" disabled={presetLoading}>Save as defaults</button>
         </div>
       </div>
 

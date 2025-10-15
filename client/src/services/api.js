@@ -120,7 +120,9 @@ export const wellnessAPI = {
   },
   upsert: (data) => api.post('/wellness', data),
   remove: (id) => api.delete(`/wellness/${id}`),
-  correlations: () => api.get('/wellness/correlations')
+  correlations: () => api.get('/wellness/correlations'),
+  getPreset: () => api.get('/wellness/preset'),
+  savePreset: (data) => api.post('/wellness/preset', data)
 };
 
 // Coach API

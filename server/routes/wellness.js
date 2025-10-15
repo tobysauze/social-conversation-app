@@ -16,12 +16,26 @@ async function ensureWellnessTable() {
         date DATE NOT NULL,
         supplements TEXT,
         medication TEXT,
+        diet_items TEXT,
         diet_quality INTEGER,
         exercise_minutes INTEGER,
         exercise_intensity INTEGER,
         sleep_quality INTEGER,
         sleep_score INTEGER,
         created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    // Backfill missing column for existing deployments
+    try { await prisma.$executeRawUnsafe(`ALTER TABLE wellness_entries ADD COLUMN IF NOT EXISTS diet_items TEXT`); } catch (_) {}
+
+    // Preset table for user defaults
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS wellness_presets (
+        user_id INTEGER PRIMARY KEY,
+        supplements TEXT,
+        medication TEXT,
+        diet_items TEXT,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -42,6 +56,7 @@ function mapWellness(row) {
     date: row.date,
     supplements: row.supplements ? JSON.parse(row.supplements) : [],
     medication: row.medication ? JSON.parse(row.medication) : [],
+    diet_items: row.diet_items ? JSON.parse(row.diet_items) : [],
     diet_quality: row.diet_quality ?? null,
     exercise_minutes: row.exercise_minutes ?? 0,
     exercise_intensity: row.exercise_intensity ?? null,
@@ -81,6 +96,7 @@ router.post('/', authenticateToken, async (req, res) => {
     date,
     supplements = [],
     medication = [],
+    diet_items = [],
     diet_quality,
     exercise_minutes = 0,
     exercise_intensity,
@@ -96,9 +112,10 @@ router.post('/', authenticateToken, async (req, res) => {
     );
     if (existing.length > 0) {
       await prisma.$executeRawUnsafe(
-        `UPDATE wellness_entries SET supplements=$1, medication=$2, diet_quality=$3, exercise_minutes=$4, exercise_intensity=$5, sleep_quality=$6, sleep_score=$7, updated_at=NOW() WHERE id=$8`,
+        `UPDATE wellness_entries SET supplements=$1, medication=$2, diet_items=$3, diet_quality=$4, exercise_minutes=$5, exercise_intensity=$6, sleep_quality=$7, sleep_score=$8, updated_at=NOW() WHERE id=$9`,
         JSON.stringify(supplements),
         JSON.stringify(medication),
+        JSON.stringify(diet_items),
         diet_quality ?? null,
         exercise_minutes ?? 0,
         exercise_intensity ?? null,
@@ -109,11 +126,12 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.json({ message: 'Updated' });
     }
     await prisma.$executeRawUnsafe(
-      `INSERT INTO wellness_entries (user_id, date, supplements, medication, diet_quality, exercise_minutes, exercise_intensity, sleep_quality, sleep_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      `INSERT INTO wellness_entries (user_id, date, supplements, medication, diet_items, diet_quality, exercise_minutes, exercise_intensity, sleep_quality, sleep_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       req.user.userId,
       date,
       JSON.stringify(supplements),
       JSON.stringify(medication),
+      JSON.stringify(diet_items),
       diet_quality ?? null,
       exercise_minutes ?? 0,
       exercise_intensity ?? null,
@@ -123,6 +141,41 @@ router.post('/', authenticateToken, async (req, res) => {
     res.status(201).json({ message: 'Created' });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Preset routes
+router.get('/preset', authenticateToken, async (req, res) => {
+  await ensureWellnessTable();
+  try {
+    const rows = await prisma.$queryRawUnsafe(`SELECT * FROM wellness_presets WHERE user_id=$1`, req.user.userId);
+    if (!rows || rows.length === 0) return res.json({ preset: { supplements: [], medication: [], diet_items: [] } });
+    const r = rows[0];
+    return res.json({ preset: {
+      supplements: r.supplements ? JSON.parse(r.supplements) : [],
+      medication: r.medication ? JSON.parse(r.medication) : [],
+      diet_items: r.diet_items ? JSON.parse(r.diet_items) : []
+    }});
+  } catch (e) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+router.post('/preset', authenticateToken, async (req, res) => {
+  await ensureWellnessTable();
+  const { supplements = [], medication = [], diet_items = [] } = req.body;
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO wellness_presets (user_id, supplements, medication, diet_items) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (user_id) DO UPDATE SET supplements=EXCLUDED.supplements, medication=EXCLUDED.medication, diet_items=EXCLUDED.diet_items, updated_at=NOW()`,
+      req.user.userId,
+      JSON.stringify(supplements),
+      JSON.stringify(medication),
+      JSON.stringify(diet_items)
+    );
+    res.json({ message: 'Preset saved' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save preset' });
   }
 });
 
