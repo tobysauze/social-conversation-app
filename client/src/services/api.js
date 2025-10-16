@@ -63,10 +63,10 @@ export const storiesAPI = {
   getStory: (id) => api.get(`/stories/${id}`),
   extractStories: (journalId) => api.post(`/stories/extract/${journalId}`),
   createStory: (data) => api.post('/stories', data),
+  updateStory: (id, data) => api.patch(`/stories/${id}`, data),
   refineStory: (id, data) => api.post(`/stories/${id}/refine`, data),
   previewRefinePrompt: (id, data) => api.post(`/stories/${id}/refine?preview=prompt`, data),
   getConversationStarters: (id) => api.get(`/stories/${id}/conversation-starters`),
-  updateStory: (id, data) => api.patch(`/stories/${id}`, data),
   deleteStory: (id) => api.delete(`/stories/${id}`),
 };
 

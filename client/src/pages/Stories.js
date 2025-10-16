@@ -15,6 +15,8 @@ const Stories = () => {
   const [refineControls, setRefineControls] = useState({ tone: 'funny', duration: 45, notes: '' });
   const [showPrompt, setShowPrompt] = useState(false);
   const [promptText, setPromptText] = useState('');
+  const [isEditingStory, setIsEditingStory] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
   const [newStory, setNewStory] = useState({
     title: '',
     content: '',
@@ -102,6 +104,8 @@ const Stories = () => {
 
   const handleViewStory = (story) => {
     setSelectedStory(story);
+    setEditedContent(story.content);
+    setIsEditingStory(false);
     setIsViewModalOpen(true);
   };
 
@@ -109,6 +113,26 @@ const Stories = () => {
     setIsViewModalOpen(false);
     setSelectedStory(null);
     setImprovedStory(null);
+    setIsEditingStory(false);
+    setEditedContent('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedStory || !editedContent.trim()) {
+      toast.error('Story content cannot be empty');
+      return;
+    }
+    try {
+      const res = await storiesAPI.updateStory(selectedStory.id, { content: editedContent });
+      const s = res.data.story;
+      setSelectedStory({ ...selectedStory, content: s.content });
+      setStories(prev => prev.map(st => st.id === selectedStory.id ? { ...st, content: s.content } : st));
+      setIsEditingStory(false);
+      toast.success('Story saved!');
+    } catch (error) {
+      console.error('Failed to save edit', error);
+      toast.error('Failed to save changes');
+    }
   };
 
   const handleImproveStory = async () => {
@@ -377,10 +401,48 @@ const Stories = () => {
 
               {/* Story Content */}
               <div className="prose max-w-none">
-                <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {selectedStory.content}
-                </div>
+                {isEditingStory ? (
+                  <textarea
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    rows={10}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-gray-700"
+                  />
+                ) : (
+                  <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {selectedStory.content}
+                  </div>
+                )}
               </div>
+              
+              {/* Edit/Save buttons */}
+              {!isEditingStory ? (
+                <button
+                  onClick={() => setIsEditingStory(true)}
+                  className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Edit Story
+                </button>
+              ) : (
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditingStory(false);
+                      setEditedContent(selectedStory.content);
+                    }}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
 
               {/* Improved Story Section */}
               {improvedStory && (

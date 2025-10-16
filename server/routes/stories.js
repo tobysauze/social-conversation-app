@@ -340,35 +340,53 @@ router.get('/:id/conversation-starters', authenticateToken, async (req, res) => 
   }
 });
 
-// Update story (mark as told, add success rating)
+// Update story (mark as told, add success rating, or edit content)
 router.patch('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { times_told, success_rating } = req.body;
+  const { times_told, success_rating, content, title } = req.body;
 
-  const updates = [];
-  const params = [];
+  const updateData = {};
 
   if (times_told !== undefined) {
-    updates.push('times_told = ?');
-    params.push(times_told);
+    updateData.timesTold = times_told;
   }
 
   if (success_rating !== undefined) {
-    updates.push('success_rating = ?');
-    params.push(success_rating);
+    updateData.successRating = success_rating;
   }
 
-  if (updates.length === 0) {
+  if (content !== undefined) {
+    updateData.content = content;
+  }
+
+  if (title !== undefined) {
+    updateData.title = title;
+  }
+
+  if (Object.keys(updateData).length === 0) {
     return res.status(400).json({ error: 'No valid updates provided' });
   }
 
-  updates.push('updated_at = CURRENT_TIMESTAMP');
   try {
-    await prisma.story.update({
-      where: { id: Number(id) },
-      data: Object.fromEntries(updates.map((u, i) => [u.split(' = ')[0].replace('duration_seconds','durationSeconds').replace('times_told','timesTold').replace('success_rating','successRating'), params[i]]))
+    const updated = await prisma.story.update({
+      where: { id: Number(id), userId: req.user.userId },
+      data: updateData
     });
-    res.json({ message: 'Story updated successfully' });
+    const legacy = {
+      id: updated.id,
+      user_id: updated.userId,
+      journal_entry_id: updated.journalEntryId,
+      title: updated.title,
+      content: updated.content,
+      tone: updated.tone,
+      duration_seconds: updated.durationSeconds,
+      tags: updated.tags,
+      times_told: updated.timesTold,
+      success_rating: updated.successRating,
+      created_at: updated.createdAt,
+      updated_at: updated.updatedAt
+    };
+    res.json({ story: legacy });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Story not found' });
     res.status(500).json({ error: 'Failed to update story' });
