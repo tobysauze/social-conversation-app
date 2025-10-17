@@ -1,5 +1,6 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
+const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -11,15 +12,31 @@ async function ensureTables() {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS identity_visions (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL UNIQUE,
         vision TEXT,
-        values TEXT, -- JSON array of core values words
-        principles TEXT, -- JSON array of principles
+        values TEXT,
+        principles TEXT,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
   } catch (e) {
-    console.warn('Ensure identity tables failed:', e?.message);
+    console.warn('Ensure identity tables (Postgres) failed:', e?.message);
+    // Fallback to SQLite
+    try {
+      const db = getDatabase();
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS identity_visions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL UNIQUE,
+          vision TEXT,
+          values TEXT,
+          principles TEXT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } catch (sqliteErr) {
+      console.warn('Ensure identity tables (SQLite) failed:', sqliteErr?.message);
+    }
   }
   ensured = true;
 }
@@ -32,7 +49,17 @@ router.get('/', authenticateToken, async (req, res) => {
     const r = rows[0];
     res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [] } });
   } catch (e) {
-    res.status(500).json({ error: 'Database error' });
+    console.error('Identity GET (Postgres) error:', e);
+    // Fallback to SQLite
+    try {
+      const db = getDatabase();
+      const r = db.prepare('SELECT * FROM identity_visions WHERE user_id = ? LIMIT 1').get(req.user.userId);
+      if (!r) return res.json({ identity: { vision: '', values: [], principles: [] } });
+      res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [] } });
+    } catch (sqliteErr) {
+      console.error('Identity GET (SQLite) error:', sqliteErr);
+      res.status(500).json({ error: 'Database error' });
+    }
   }
 });
 
@@ -50,7 +77,20 @@ router.post('/', authenticateToken, async (req, res) => {
     );
     res.json({ message: 'Saved' });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to save identity' });
+    console.error('Identity POST (Postgres) error:', e);
+    // Fallback to SQLite
+    try {
+      const db = getDatabase();
+      db.prepare(`
+        INSERT INTO identity_visions (user_id, vision, values, principles)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET vision=excluded.vision, values=excluded.values, principles=excluded.principles, updated_at=CURRENT_TIMESTAMP
+      `).run(req.user.userId, vision, JSON.stringify(values), JSON.stringify(principles));
+      res.json({ message: 'Saved' });
+    } catch (sqliteErr) {
+      console.error('Identity POST (SQLite) error:', sqliteErr);
+      res.status(500).json({ error: 'Failed to save identity' });
+    }
   }
 });
 
