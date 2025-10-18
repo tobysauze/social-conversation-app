@@ -46,13 +46,17 @@ const Wellness = () => {
       setPresetLoading(true);
       try {
         const pr = await wellnessAPI.getPreset();
-        const p = pr.data.preset || { supplements: [], medication: [], diet_items: [] };
-        // initialize form stacks if empty
+        const p = pr.data.preset || { supplements: [], medication: [], diet_items: [], weight_kg: null, height_cm: null, bmi: null, body_fat_percent: null };
+        // initialize stacks and body metrics if empty
         setForm(prev => ({
           ...prev,
           supplements: prev.supplements?.length ? prev.supplements : p.supplements,
           medication: prev.medication?.length ? prev.medication : p.medication,
-          diet_items: prev.diet_items?.length ? prev.diet_items : p.diet_items
+          diet_items: prev.diet_items?.length ? prev.diet_items : p.diet_items,
+          weight_kg: prev.weight_kg || (p.weight_kg ?? ''),
+          height_cm: prev.height_cm || (p.height_cm ?? ''),
+          bmi: prev.bmi || (p.bmi ?? ''),
+          body_fat_percent: prev.body_fat_percent || (p.body_fat_percent ?? '')
         }));
       } catch (_) {}
       setPresetLoading(false);

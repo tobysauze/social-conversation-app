@@ -44,6 +44,10 @@ async function ensureWellnessTable() {
         supplements TEXT,
         medication TEXT,
         diet_items TEXT,
+        weight_kg REAL,
+        height_cm REAL,
+        bmi REAL,
+        body_fat_percent REAL,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -162,6 +166,19 @@ router.post('/', authenticateToken, async (req, res) => {
       bmi ?? null,
       body_fat_percent ?? null
     );
+    // Persist latest body metrics to presets for next time
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO wellness_presets (user_id, weight_kg, height_cm, bmi, body_fat_percent)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (user_id) DO UPDATE SET weight_kg=COALESCE(EXCLUDED.weight_kg, wellness_presets.weight_kg), height_cm=COALESCE(EXCLUDED.height_cm, wellness_presets.height_cm), bmi=COALESCE(EXCLUDED.bmi, wellness_presets.bmi), body_fat_percent=COALESCE(EXCLUDED.body_fat_percent, wellness_presets.body_fat_percent), updated_at=NOW()`,
+        req.user.userId,
+        weight_kg ?? null,
+        height_cm ?? null,
+        bmi ?? null,
+        body_fat_percent ?? null
+      );
+    } catch (_) {}
     res.status(201).json({ message: 'Created' });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
@@ -173,12 +190,16 @@ router.get('/preset', authenticateToken, async (req, res) => {
   await ensureWellnessTable();
   try {
     const rows = await prisma.$queryRawUnsafe(`SELECT * FROM wellness_presets WHERE user_id=$1`, req.user.userId);
-    if (!rows || rows.length === 0) return res.json({ preset: { supplements: [], medication: [], diet_items: [] } });
+    if (!rows || rows.length === 0) return res.json({ preset: { supplements: [], medication: [], diet_items: [], weight_kg: null, height_cm: null, bmi: null, body_fat_percent: null } });
     const r = rows[0];
     return res.json({ preset: {
       supplements: r.supplements ? JSON.parse(r.supplements) : [],
       medication: r.medication ? JSON.parse(r.medication) : [],
-      diet_items: r.diet_items ? JSON.parse(r.diet_items) : []
+      diet_items: r.diet_items ? JSON.parse(r.diet_items) : [],
+      weight_kg: r.weight_kg ?? null,
+      height_cm: r.height_cm ?? null,
+      bmi: r.bmi ?? null,
+      body_fat_percent: r.body_fat_percent ?? null
     }});
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
@@ -187,15 +208,19 @@ router.get('/preset', authenticateToken, async (req, res) => {
 
 router.post('/preset', authenticateToken, async (req, res) => {
   await ensureWellnessTable();
-  const { supplements = [], medication = [], diet_items = [] } = req.body;
+  const { supplements = [], medication = [], diet_items = [], weight_kg = null, height_cm = null, bmi = null, body_fat_percent = null } = req.body;
   try {
     await prisma.$executeRawUnsafe(
-      `INSERT INTO wellness_presets (user_id, supplements, medication, diet_items) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (user_id) DO UPDATE SET supplements=EXCLUDED.supplements, medication=EXCLUDED.medication, diet_items=EXCLUDED.diet_items, updated_at=NOW()`,
+      `INSERT INTO wellness_presets (user_id, supplements, medication, diet_items, weight_kg, height_cm, bmi, body_fat_percent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id) DO UPDATE SET supplements=EXCLUDED.supplements, medication=EXCLUDED.medication, diet_items=EXCLUDED.diet_items, weight_kg=EXCLUDED.weight_kg, height_cm=EXCLUDED.height_cm, bmi=EXCLUDED.bmi, body_fat_percent=EXCLUDED.body_fat_percent, updated_at=NOW()`,
       req.user.userId,
       JSON.stringify(supplements),
       JSON.stringify(medication),
-      JSON.stringify(diet_items)
+      JSON.stringify(diet_items),
+      weight_kg ?? null,
+      height_cm ?? null,
+      bmi ?? null,
+      body_fat_percent ?? null
     );
     res.json({ message: 'Preset saved' });
   } catch (e) {
