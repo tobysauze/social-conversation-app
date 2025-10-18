@@ -136,7 +136,8 @@ export const coachAPI = {
 // Identity & Goals API
 export const identityAPI = {
   get: () => api.get('/identity'),
-  save: (data) => api.post('/identity', data)
+  save: (data) => api.post('/identity', data),
+  generateVision: (vision_points) => api.post('/identity/generate-vision', { vision_points })
 };
 
 export const goalsAPI = {

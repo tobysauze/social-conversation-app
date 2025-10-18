@@ -2,6 +2,7 @@ const express = require('express');
 const { prisma } = require('../prisma/client');
 const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
+const { generateIdentityVision } = require('../services/openai');
 
 const router = express.Router();
 
@@ -98,6 +99,18 @@ router.post('/', authenticateToken, async (req, res) => {
       console.error('Identity POST (SQLite) error:', sqliteErr);
       res.status(500).json({ error: 'Failed to save identity' });
     }
+  }
+});
+
+// Generate identity vision from bullet points (does not save unless client then posts)
+router.post('/generate-vision', authenticateToken, async (req, res) => {
+  try {
+    const { vision_points = [] } = req.body;
+    const statement = await generateIdentityVision(vision_points);
+    res.json({ vision: statement });
+  } catch (e) {
+    console.error('Generate identity vision error:', e);
+    res.status(500).json({ error: 'Failed to generate vision statement' });
   }
 });
 

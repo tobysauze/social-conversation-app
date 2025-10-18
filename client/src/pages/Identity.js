@@ -50,8 +50,23 @@ const Identity = () => {
       <h1 className="text-3xl font-bold flex items-center mb-6"><Heart className="w-7 h-7 text-rose-500 mr-2"/>Who I Want To Be</h1>
 
       <div className="card mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Vision statement</label>
-        <textarea value={vision} onChange={(e)=>setVision(e.target.value)} rows={4} className="w-full px-3 py-2 border rounded" placeholder="Describe the kind of person you aspire to be…" />
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-gray-700">Vision statement</label>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={async ()=>{
+              try {
+                const res = await identityAPI.generateVision(visionPoints);
+                setVision(res.data.vision || '');
+              } catch (e) {
+                console.error(e);
+                toast.error('Failed to generate');
+              }
+            }}
+          >Generate from points</button>
+        </div>
+        <textarea value={vision} onChange={(e)=>setVision(e.target.value)} rows={4} className="w-full px-3 py-2 border rounded" placeholder="LLM-generated summary of your points (you can edit it)" />
         <div className="mt-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">Vision points (bullet list)</label>
           <div className="flex gap-2 mb-2">

@@ -662,6 +662,27 @@ ${journalContent}
   }
 };
 
+// Generate an identity vision statement from bullet points
+const generateIdentityVision = async (visionPoints = []) => {
+  const listText = (visionPoints || []).map((p, i) => `${i + 1}. ${p}`).join('\n');
+  const prompt = `You are a concise, inspiring coach. Given the user's short bullet points about the kind of person they want to be, write a brief identity vision statement (3-6 sentences) that:
+- sounds like a grounded, real person (not corporate or cheesy)
+- keeps it conversational and motivating
+- emphasizes behaviors, values, and direction (not perfection)
+- can be read aloud in 20–40 seconds
+
+Bullet points:\n${listText || '(none)'}\n
+Return ONLY the statement text.`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.6,
+    max_tokens: 220
+  });
+  return response.choices[0].message.content.trim();
+};
+
 module.exports = {
   extractStories,
   refineStory,
@@ -673,5 +694,6 @@ module.exports = {
   generateJoke,
   iterateJoke,
   categorizeJoke,
-  analyzeJournalForCBTIssues
+  analyzeJournalForCBTIssues,
+  generateIdentityVision
 };
