@@ -47,6 +47,20 @@ async function ensureTables() {
   ensured = true;
 }
 
+function normalizeDate(input) {
+  if (!input) return null;
+  // Already ISO (YYYY-MM-DD)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+  // Convert from DD/MM/YYYY to YYYY-MM-DD
+  const m = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) {
+    const [_, dd, mm, yyyy] = m;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  // Fallback: return as-is
+  return input;
+}
+
 router.get('/', authenticateToken, async (req, res) => {
   await ensureTables();
   try {
@@ -68,7 +82,8 @@ router.get('/', authenticateToken, async (req, res) => {
 
 router.post('/', authenticateToken, async (req, res) => {
   await ensureTables();
-  const { title, description = '', area = null, target_date = null } = req.body;
+  const { title, description = '', area = null } = req.body;
+  const target_date = normalizeDate(req.body.target_date);
   if (!title) return res.status(400).json({ error: 'title required' });
   try {
     await prisma.$executeRawUnsafe(
@@ -95,7 +110,8 @@ router.post('/', authenticateToken, async (req, res) => {
 router.patch('/:id', authenticateToken, async (req, res) => {
   await ensureTables();
   const { id } = req.params;
-  const { title, description, area, target_date, status } = req.body;
+  const { title, description, area, status } = req.body;
+  const target_date = normalizeDate(req.body.target_date);
   const fields = [];
   const params = [];
   function add(field, val) { if (val !== undefined) { fields.push(`${field}=$${fields.length+1}`); params.push(val); } }
