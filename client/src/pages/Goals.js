@@ -8,6 +8,41 @@ const Goals = () => {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ title: '', description: '', area: '', target_date: '' });
 
+  const getDaysUntil = (dateStr) => {
+    if (!dateStr) return null;
+    // Accept YYYY-MM-DD or DD/MM/YYYY
+    let y, m, d;
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length !== 3) return null;
+      [d, m, y] = parts.map(Number);
+    } else if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return null;
+      [y, m, d] = parts.map(Number);
+    } else {
+      return null;
+    }
+    const targetUtc = Date.UTC(y, (m - 1), d);
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const diffDays = Math.round((targetUtc - todayUtc) / 86400000); // 86_400_000 ms/day
+    return diffDays;
+  };
+
+  const renderCountdown = (dateStr) => {
+    const days = getDaysUntil(dateStr);
+    if (days === null) return null;
+    let text = '';
+    let cls = 'bg-gray-100 text-gray-700';
+    if (days > 7) { text = `${days}d left`; cls = 'bg-green-100 text-green-800'; }
+    else if (days > 1) { text = `${days}d left`; cls = 'bg-yellow-100 text-yellow-800'; }
+    else if (days === 1) { text = 'tomorrow'; cls = 'bg-yellow-100 text-yellow-800'; }
+    else if (days === 0) { text = 'due today'; cls = 'bg-orange-100 text-orange-800'; }
+    else { text = `${Math.abs(days)}d overdue`; cls = 'bg-red-100 text-red-800'; }
+    return <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${cls}`}>{text}</span>;
+  };
+
   const load = async () => {
     try {
       const res = await goalsAPI.list();
@@ -63,7 +98,7 @@ const Goals = () => {
         {items.map(g => (
           <div key={g.id} className="border rounded-lg p-4 flex items-start justify-between">
             <div>
-              <div className="font-medium text-gray-900">{g.title}</div>
+              <div className="font-medium text-gray-900 flex items-center">{g.title} {renderCountdown(g.target_date)}</div>
               <div className="text-sm text-gray-600">{g.area || '—'} {g.target_date ? `• by ${g.target_date}` : ''}</div>
               {g.description && <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{g.description}</div>}
             </div>
