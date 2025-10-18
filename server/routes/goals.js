@@ -1,5 +1,6 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
+const { Prisma } = require('@prisma/client');
 const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -64,7 +65,7 @@ function normalizeDate(input) {
 router.get('/', authenticateToken, async (req, res) => {
   await ensureTables();
   try {
-    const rows = await prisma.$queryRawUnsafe(`SELECT * FROM goals WHERE user_id=$1 ORDER BY created_at DESC`, req.user.userId);
+    const rows = await prisma.$queryRaw`SELECT * FROM goals WHERE user_id=${req.user.userId} ORDER BY created_at DESC`;
     res.json({ goals: rows });
   } catch (e) {
     console.error('Goals GET (Postgres) error:', e);
@@ -86,10 +87,7 @@ router.post('/', authenticateToken, async (req, res) => {
   const target_date = normalizeDate(req.body.target_date);
   if (!title) return res.status(400).json({ error: 'title required' });
   try {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO goals (user_id, title, description, area, target_date) VALUES ($1,$2,$3,$4,$5)`,
-      req.user.userId, title, description, area, target_date
-    );
+    await prisma.$executeRaw`INSERT INTO goals (user_id, title, description, area, target_date) VALUES (${req.user.userId}, ${title}, ${description}, ${area}, ${target_date})`;
     res.status(201).json({ message: 'Created' });
   } catch (e) {
     console.error('Goals POST (Postgres) error:', e);
@@ -115,15 +113,16 @@ router.patch('/:id', authenticateToken, async (req, res) => {
   const fields = [];
   const params = [];
   function add(field, val) { if (val !== undefined) { fields.push(`${field}=$${fields.length+1}`); params.push(val); } }
-  add('title', title);
-  add('description', description);
-  add('area', area);
-  add('target_date', target_date);
-  add('status', status);
-  if (!fields.length) return res.status(400).json({ error: 'no updates' });
-  params.push(req.user.userId, Number(id));
   try {
-    await prisma.$executeRawUnsafe(`UPDATE goals SET ${fields.join(', ')}, updated_at=NOW() WHERE user_id=$${fields.length+1} AND id=$${fields.length+2}`, ...params);
+    const sets = [];
+    if (title !== undefined) sets.push(Prisma.sql`title = ${title}`);
+    if (description !== undefined) sets.push(Prisma.sql`description = ${description}`);
+    if (area !== undefined) sets.push(Prisma.sql`area = ${area}`);
+    if (target_date !== undefined) sets.push(Prisma.sql`target_date = ${target_date}`);
+    if (status !== undefined) sets.push(Prisma.sql`status = ${status}`);
+    if (!sets.length) return res.status(400).json({ error: 'no updates' });
+    const setSql = Prisma.join(sets, Prisma.raw(', '));
+    await prisma.$executeRaw`UPDATE goals SET ${setSql}, updated_at=NOW() WHERE user_id=${req.user.userId} AND id=${Number(id)}`;
     res.json({ message: 'Updated' });
   } catch (e) {
     console.error('Goals PATCH (Postgres) error:', e);
@@ -151,7 +150,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 router.delete('/:id', authenticateToken, async (req, res) => {
   await ensureTables();
   try {
-    await prisma.$executeRawUnsafe(`DELETE FROM goals WHERE user_id=$1 AND id=$2`, req.user.userId, Number(req.params.id));
+    await prisma.$executeRaw`DELETE FROM goals WHERE user_id=${req.user.userId} AND id=${Number(req.params.id)}`;
     res.json({ message: 'Deleted' });
   } catch (e) {
     console.error('Goals DELETE (Postgres) error:', e);
