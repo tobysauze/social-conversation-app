@@ -14,11 +14,13 @@ async function ensureTables() {
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL UNIQUE,
         vision TEXT,
-        values TEXT,
+        "values" TEXT,
         principles TEXT,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Ensure unique index exists even if table was created earlier without UNIQUE
+    try { await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS identity_visions_user_id_idx ON identity_visions(user_id)`); } catch(_) {}
   } catch (e) {
     console.warn('Ensure identity tables (Postgres) failed:', e?.message);
     // Fallback to SQLite
@@ -29,11 +31,13 @@ async function ensureTables() {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id INTEGER NOT NULL UNIQUE,
           vision TEXT,
-          values TEXT,
+          "values" TEXT,
           principles TEXT,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      // Ensure unique index exists
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS identity_visions_user_id_idx ON identity_visions(user_id)`);
     } catch (sqliteErr) {
       console.warn('Ensure identity tables (SQLite) failed:', sqliteErr?.message);
     }
@@ -68,8 +72,8 @@ router.post('/', authenticateToken, async (req, res) => {
   const { vision = '', values = [], principles = [] } = req.body;
   try {
     await prisma.$executeRawUnsafe(
-      `INSERT INTO identity_visions (user_id, vision, values, principles) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, values=EXCLUDED.values, principles=EXCLUDED.principles, updated_at=NOW()`,
+      `INSERT INTO identity_visions (user_id, vision, "values", principles) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, "values"=EXCLUDED."values", principles=EXCLUDED.principles, updated_at=NOW()`,
       req.user.userId,
       vision,
       JSON.stringify(values),
@@ -82,9 +86,9 @@ router.post('/', authenticateToken, async (req, res) => {
     try {
       const db = getDatabase();
       db.prepare(`
-        INSERT INTO identity_visions (user_id, vision, values, principles)
+        INSERT INTO identity_visions (user_id, vision, "values", principles)
         VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET vision=excluded.vision, values=excluded.values, principles=excluded.principles, updated_at=CURRENT_TIMESTAMP
+        ON CONFLICT(user_id) DO UPDATE SET vision=excluded.vision, "values"=excluded."values", principles=excluded.principles, updated_at=CURRENT_TIMESTAMP
       `).run(req.user.userId, vision, JSON.stringify(values), JSON.stringify(principles));
       res.json({ message: 'Saved' });
     } catch (sqliteErr) {
