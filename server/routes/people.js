@@ -5,6 +5,22 @@ const { getStoryRecommendations, analyzeJournalForPeopleInsights } = require('..
 
 const router = express.Router();
 
+function parseJsonArrayOrWrap(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+      if (typeof parsed === 'string') return [parsed];
+    } catch (_) {
+      // Fallback: split by comma if present, else wrap
+      if (value.includes(',')) return value.split(',').map(s=>s.trim()).filter(Boolean);
+      return [value];
+    }
+  }
+  return [];
+}
+
 // Get all people for a user
 router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
@@ -22,11 +38,11 @@ router.get('/', authenticateToken, async (req, res) => {
       name: p.name,
       relationship: p.relationship,
       how_met: p.howMet,
-      interests: p.interests ? JSON.parse(p.interests) : [],
-      personality_traits: p.personalityTraits ? JSON.parse(p.personalityTraits) : [],
+      interests: parseJsonArrayOrWrap(p.interests),
+      personality_traits: parseJsonArrayOrWrap(p.personalityTraits),
       conversation_style: p.conversationStyle,
-      shared_experiences: p.sharedExperiences ? JSON.parse(p.sharedExperiences) : [],
-      story_preferences: p.storyPreferences ? JSON.parse(p.storyPreferences) : [],
+      shared_experiences: parseJsonArrayOrWrap(p.sharedExperiences),
+      story_preferences: parseJsonArrayOrWrap(p.storyPreferences),
       notes: p.notes,
       created_at: p.createdAt,
       updated_at: p.updatedAt
@@ -51,11 +67,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
       name: person.name,
       relationship: person.relationship,
       how_met: person.howMet,
-      interests: person.interests ? JSON.parse(person.interests) : [],
-      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
+      interests: parseJsonArrayOrWrap(person.interests),
+      personality_traits: parseJsonArrayOrWrap(person.personalityTraits),
       conversation_style: person.conversationStyle,
-      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
-      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
+      shared_experiences: parseJsonArrayOrWrap(person.sharedExperiences),
+      story_preferences: parseJsonArrayOrWrap(person.storyPreferences),
       notes: person.notes,
       created_at: person.createdAt,
       updated_at: person.updatedAt
