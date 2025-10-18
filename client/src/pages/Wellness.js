@@ -19,7 +19,11 @@ const Wellness = () => {
     exercise_minutes: '',
     exercise_intensity: '',
     sleep_quality: '',
-    sleep_score: ''
+    sleep_score: '',
+    weight_kg: '',
+    height_cm: '',
+    bmi: '',
+    body_fat_percent: ''
   });
   const [supp, setSupp] = useState('');
   const [med, setMed] = useState('');
@@ -81,7 +85,11 @@ const Wellness = () => {
         exercise_minutes: form.exercise_minutes ? Number(form.exercise_minutes) : 0,
         exercise_intensity: form.exercise_intensity ? Number(form.exercise_intensity) : null,
         sleep_quality: form.sleep_quality ? Number(form.sleep_quality) : null,
-        sleep_score: form.sleep_score ? Number(form.sleep_score) : null
+        sleep_score: form.sleep_score ? Number(form.sleep_score) : null,
+        weight_kg: form.weight_kg ? Number(form.weight_kg) : null,
+        height_cm: form.height_cm ? Number(form.height_cm) : null,
+        bmi: form.bmi ? Number(form.bmi) : null,
+        body_fat_percent: form.body_fat_percent ? Number(form.body_fat_percent) : null
       };
       await wellnessAPI.upsert(payload);
       toast.success('Saved');
@@ -168,6 +176,36 @@ const Wellness = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Sleep score</label>
             <input type="number" min="0" max="100" value={form.sleep_score} onChange={(e)=>setForm({...form, sleep_score: e.target.value})} className="input-field" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg)</label>
+            <input type="number" min="0" step="0.1" value={form.weight_kg} onChange={(e)=>{
+              const weight_kg = e.target.value;
+              setForm(prev=>{
+                const height_m = Number(prev.height_cm||0)/100;
+                const bmi = height_m>0 && weight_kg ? (Number(weight_kg)/(height_m*height_m)).toFixed(1) : '';
+                return { ...prev, weight_kg, bmi };
+              });
+            }} className="input-field" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Height (cm)</label>
+            <input type="number" min="0" step="0.5" value={form.height_cm} onChange={(e)=>{
+              const height_cm = e.target.value;
+              setForm(prev=>{
+                const height_m = Number(height_cm||0)/100;
+                const bmi = height_m>0 && prev.weight_kg ? (Number(prev.weight_kg)/(height_m*height_m)).toFixed(1) : '';
+                return { ...prev, height_cm, bmi };
+              });
+            }} className="input-field" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">BMI (auto)</label>
+            <input type="number" step="0.1" value={form.bmi} onChange={(e)=>setForm({...form, bmi: e.target.value})} className="input-field" placeholder="auto-calculated from height & weight" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Body fat %</label>
+            <input type="number" min="0" max="100" step="0.1" value={form.body_fat_percent} onChange={(e)=>setForm({...form, body_fat_percent: e.target.value})} className="input-field" />
           </div>
         </div>
 
@@ -257,6 +295,9 @@ const Wellness = () => {
                   <span className="mr-3">Diet: {e.diet_quality ?? '—'}</span>
                   <span className="mr-3">Exercise: {e.exercise_minutes}m{e.exercise_intensity ? ` @${e.exercise_intensity}` : ''}</span>
                   <span className="mr-3">Sleep: {e.sleep_quality ?? '—'} / {e.sleep_score ?? '—'}</span>
+                  {e.weight_kg ? <span className="mr-3">Weight: {e.weight_kg}kg</span> : null}
+                  {e.bmi ? <span className="mr-3">BMI: {e.bmi}</span> : null}
+                  {e.body_fat_percent ? <span className="mr-3">BF%: {e.body_fat_percent}</span> : null}
                 </div>
                 <div className="text-xs text-gray-600 mt-1">
                   {e.supplements?.length ? `Supp: ${e.supplements.join(', ')}` : ''}
