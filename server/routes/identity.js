@@ -16,6 +16,7 @@ async function ensureTables() {
         vision TEXT,
         "values" TEXT,
         principles TEXT,
+        vision_points TEXT,
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -33,6 +34,7 @@ async function ensureTables() {
           vision TEXT,
           "values" TEXT,
           principles TEXT,
+          vision_points TEXT,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
@@ -49,17 +51,17 @@ router.get('/', authenticateToken, async (req, res) => {
   await ensureTables();
   try {
     const rows = await prisma.$queryRawUnsafe(`SELECT * FROM identity_visions WHERE user_id=$1 LIMIT 1`, req.user.userId);
-    if (!rows.length) return res.json({ identity: { vision: '', values: [], principles: [] } });
+    if (!rows.length) return res.json({ identity: { vision: '', values: [], principles: [], vision_points: [] } });
     const r = rows[0];
-    res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [] } });
+    res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [], vision_points: r.vision_points ? JSON.parse(r.vision_points) : [] } });
   } catch (e) {
     console.error('Identity GET (Postgres) error:', e);
     // Fallback to SQLite
     try {
       const db = getDatabase();
       const r = db.prepare('SELECT * FROM identity_visions WHERE user_id = ? LIMIT 1').get(req.user.userId);
-      if (!r) return res.json({ identity: { vision: '', values: [], principles: [] } });
-      res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [] } });
+      if (!r) return res.json({ identity: { vision: '', values: [], principles: [], vision_points: [] } });
+      res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [], vision_points: r.vision_points ? JSON.parse(r.vision_points) : [] } });
     } catch (sqliteErr) {
       console.error('Identity GET (SQLite) error:', sqliteErr);
       res.status(500).json({ error: 'Database error' });
@@ -69,15 +71,16 @@ router.get('/', authenticateToken, async (req, res) => {
 
 router.post('/', authenticateToken, async (req, res) => {
   await ensureTables();
-  const { vision = '', values = [], principles = [] } = req.body;
+  const { vision = '', values = [], principles = [], vision_points = [] } = req.body;
   try {
     await prisma.$executeRawUnsafe(
-      `INSERT INTO identity_visions (user_id, vision, "values", principles) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, "values"=EXCLUDED."values", principles=EXCLUDED.principles, updated_at=NOW()`,
+      `INSERT INTO identity_visions (user_id, vision, "values", principles, vision_points) VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, "values"=EXCLUDED."values", principles=EXCLUDED.principles, vision_points=EXCLUDED.vision_points, updated_at=NOW()`,
       req.user.userId,
       vision,
       JSON.stringify(values),
-      JSON.stringify(principles)
+      JSON.stringify(principles),
+      JSON.stringify(vision_points)
     );
     res.json({ message: 'Saved' });
   } catch (e) {
@@ -86,10 +89,10 @@ router.post('/', authenticateToken, async (req, res) => {
     try {
       const db = getDatabase();
       db.prepare(`
-        INSERT INTO identity_visions (user_id, vision, "values", principles)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET vision=excluded.vision, "values"=excluded."values", principles=excluded.principles, updated_at=CURRENT_TIMESTAMP
-      `).run(req.user.userId, vision, JSON.stringify(values), JSON.stringify(principles));
+        INSERT INTO identity_visions (user_id, vision, "values", principles, vision_points)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET vision=excluded.vision, "values"=excluded."values", principles=excluded.principles, vision_points=excluded.vision_points, updated_at=CURRENT_TIMESTAMP
+      `).run(req.user.userId, vision, JSON.stringify(values), JSON.stringify(principles), JSON.stringify(vision_points));
       res.json({ message: 'Saved' });
     } catch (sqliteErr) {
       console.error('Identity POST (SQLite) error:', sqliteErr);

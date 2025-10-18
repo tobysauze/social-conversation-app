@@ -7,6 +7,8 @@ const Identity = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [vision, setVision] = useState('');
+  const [visionPoints, setVisionPoints] = useState([]);
+  const [newVisionPoint, setNewVisionPoint] = useState('');
   const [values, setValues] = useState([]);
   const [principles, setPrinciples] = useState([]);
   const [tmp, setTmp] = useState({ value: '', principle: '' });
@@ -15,10 +17,11 @@ const Identity = () => {
     (async () => {
       try {
         const res = await identityAPI.get();
-        const d = res.data.identity || { vision: '', values: [], principles: [] };
+        const d = res.data.identity || { vision: '', values: [], principles: [], vision_points: [] };
         setVision(d.vision || '');
         setValues(d.values || []);
         setPrinciples(d.principles || []);
+        setVisionPoints(d.vision_points || []);
       } catch (e) {
         console.error(e);
       } finally {
@@ -30,7 +33,7 @@ const Identity = () => {
   const save = async () => {
     setSaving(true);
     try {
-      await identityAPI.save({ vision, values, principles });
+      await identityAPI.save({ vision, values, principles, vision_points: visionPoints });
       toast.success('Saved');
     } catch (e) {
       console.error(e);
@@ -48,7 +51,22 @@ const Identity = () => {
 
       <div className="card mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">Vision statement</label>
-        <textarea value={vision} onChange={(e)=>setVision(e.target.value)} rows={6} className="w-full px-3 py-2 border rounded" placeholder="Describe the kind of person you aspire to be…" />
+        <textarea value={vision} onChange={(e)=>setVision(e.target.value)} rows={4} className="w-full px-3 py-2 border rounded" placeholder="Describe the kind of person you aspire to be…" />
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Vision points (bullet list)</label>
+          <div className="flex gap-2 mb-2">
+            <input value={newVisionPoint} onChange={(e)=>setNewVisionPoint(e.target.value)} className="input-field flex-1" placeholder="e.g., Be the friend who always checks in"/>
+            <button className="btn-primary" onClick={()=>{ if(newVisionPoint.trim()){ setVisionPoints(v=>[...v, newVisionPoint.trim()]); setNewVisionPoint(''); } }}>Add</button>
+          </div>
+          <ul className="list-disc pl-6 space-y-1">
+            {visionPoints.map((vp,i)=>(
+              <li key={i} className="flex items-start">
+                <span className="flex-1">{vp}</span>
+                <button onClick={()=>setVisionPoints(v=>v.filter((_,idx)=>idx!==i))} className="text-sm text-gray-600 ml-2">Remove</button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
