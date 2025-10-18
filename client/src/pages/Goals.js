@@ -8,26 +8,34 @@ const Goals = () => {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ title: '', description: '', area: '', target_date: '' });
 
-  const getDaysUntil = (dateStr) => {
-    if (!dateStr) return null;
-    // Accept YYYY-MM-DD or DD/MM/YYYY
-    let y, m, d;
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      if (parts.length !== 3) return null;
-      [d, m, y] = parts.map(Number);
-    } else if (dateStr.includes('-')) {
-      const parts = dateStr.split('-');
-      if (parts.length !== 3) return null;
-      [y, m, d] = parts.map(Number);
-    } else {
-      return null;
+  const getDaysUntil = (input) => {
+    if (!input) return null;
+    let target;
+    // Handle Date object
+    if (input instanceof Date) {
+      target = input;
+    } else if (typeof input === 'string') {
+      // DD/MM/YYYY
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(input)) {
+        const [dd, mm, yyyy] = input.split('/').map(Number);
+        target = new Date(Date.UTC(yyyy, mm - 1, dd));
+      }
+      // YYYY-MM-DD (date only)
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+        const [yyyy, mm, dd] = input.split('-').map(Number);
+        target = new Date(Date.UTC(yyyy, mm - 1, dd));
+      }
+      // ISO timestamp
+      else if (input.includes('T')) {
+        const iso = new Date(input);
+        if (!isNaN(iso.getTime())) target = iso;
+      }
     }
-    const targetUtc = Date.UTC(y, (m - 1), d);
+    if (!target || isNaN(target.getTime())) return null;
+    const targetUtc = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
     const now = new Date();
     const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const diffDays = Math.round((targetUtc - todayUtc) / 86400000); // 86_400_000 ms/day
-    return diffDays;
+    return Math.round((targetUtc - todayUtc) / 86400000);
   };
 
   const renderCountdown = (dateStr) => {
