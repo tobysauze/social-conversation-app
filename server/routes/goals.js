@@ -25,25 +25,25 @@ async function ensureTables() {
     `);
   } catch (e) {
     console.warn('Ensure goals table (Postgres) failed:', e?.message);
-    // Fallback to SQLite
-    try {
-      const db = getDatabase();
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS goals (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          title TEXT NOT NULL,
-          description TEXT,
-          area TEXT,
-          target_date TEXT,
-          status TEXT DEFAULT 'active',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-    } catch (sqliteErr) {
-      console.warn('Ensure goals table (SQLite) failed:', sqliteErr?.message);
-    }
+  }
+  // Always ensure SQLite table as well so fallbacks never fail mid-request
+  try {
+    const db = getDatabase();
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        area TEXT,
+        target_date TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (sqliteErr) {
+    console.warn('Ensure goals table (SQLite) failed:', sqliteErr?.message);
   }
   ensured = true;
 }
@@ -87,7 +87,18 @@ router.post('/', authenticateToken, async (req, res) => {
   const target_date = normalizeDate(req.body.target_date);
   if (!title) return res.status(400).json({ error: 'title required' });
   try {
-    await prisma.$executeRaw`INSERT INTO goals (user_id, title, description, area, target_date) VALUES (${req.user.userId}, ${title}, ${description}, ${area}, ${target_date})`;
+    // For Postgres, cast target_date to date when provided
+    if (target_date) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO goals (user_id, title, description, area, target_date) VALUES ($1,$2,$3,$4,CAST($5 AS DATE))`,
+        req.user.userId, title, description, area, target_date
+      );
+    } else {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO goals (user_id, title, description, area) VALUES ($1,$2,$3,$4)`,
+        req.user.userId, title, description, area
+      );
+    }
     res.status(201).json({ message: 'Created' });
   } catch (e) {
     console.error('Goals POST (Postgres) error:', e);
@@ -118,7 +129,13 @@ router.patch('/:id', authenticateToken, async (req, res) => {
     if (title !== undefined) sets.push(Prisma.sql`title = ${title}`);
     if (description !== undefined) sets.push(Prisma.sql`description = ${description}`);
     if (area !== undefined) sets.push(Prisma.sql`area = ${area}`);
-    if (target_date !== undefined) sets.push(Prisma.sql`target_date = ${target_date}`);
+    if (target_date !== undefined) {
+      if (target_date) {
+        sets.push(Prisma.sql`target_date = CAST(${target_date} AS DATE)`);
+      } else {
+        sets.push(Prisma.sql`target_date = NULL`);
+      }
+    }
     if (status !== undefined) sets.push(Prisma.sql`status = ${status}`);
     if (!sets.length) return res.status(400).json({ error: 'no updates' });
     const setSql = Prisma.join(sets, Prisma.raw(', '));
