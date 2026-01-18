@@ -90,6 +90,11 @@ This guide will help you deploy your Social Conversation App online so you can a
 NODE_ENV=production
 JWT_SECRET=your-super-secret-jwt-key-here
 OPENAI_API_KEY=your-openai-api-key-if-you-have-one
+# OR (recommended) use OpenRouter:
+OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_SITE_URL=https://your-app.vercel.app
+OPENROUTER_APP_NAME=StoryConnect
 FRONTEND_URL=https://your-app.vercel.app
 ```
 
@@ -150,6 +155,8 @@ To update your deployed app:
 ## 🎉 You're Done!
 
 Your Social Conversation App is now live and accessible from anywhere! Share the Vercel URL with friends and family to try it out.
+
+
 
 
 

@@ -3,6 +3,14 @@ import toast from 'react-hot-toast';
 import { Bot, Plus, Trash2, Send, RefreshCw } from 'lucide-react';
 import { chatAPI } from '../services/api';
 
+const MODEL_STORAGE_KEY = 'llm_model';
+const DEFAULT_MODELS = [
+  { label: 'OpenAI: GPT-4o mini', value: 'openai/gpt-4o-mini' },
+  { label: 'OpenAI: GPT-4o', value: 'openai/gpt-4o' },
+  { label: 'Anthropic: Claude 3.5 Sonnet', value: 'anthropic/claude-3.5-sonnet' },
+  { label: 'Google: Gemini 1.5 Pro', value: 'google/gemini-1.5-pro' }
+];
+
 const Chat = () => {
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -12,6 +20,8 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState('');
   const [useMemory, setUseMemory] = useState(true);
+  const [model, setModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODELS[0].value);
+  const [customModel, setCustomModel] = useState('');
 
   const endRef = useRef(null);
 
@@ -63,6 +73,12 @@ const Chat = () => {
   }, []);
 
   useEffect(() => {
+    try {
+      if (model) localStorage.setItem(MODEL_STORAGE_KEY, model);
+    } catch (_) {}
+  }, [model]);
+
+  useEffect(() => {
     loadMessages(activeId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
@@ -103,7 +119,7 @@ const Chat = () => {
     setTimeout(scrollToBottom, 50);
 
     try {
-      const res = await chatAPI.sendMessage({ conversationId: activeId, message: text, useMemory });
+      const res = await chatAPI.sendMessage({ conversationId: activeId, message: text, useMemory, model });
       const convId = res.data.conversationId;
       const assistantText = res.data.assistant;
 
@@ -147,7 +163,43 @@ const Chat = () => {
             <p className="text-sm text-gray-600">Chat, save conversations, and use them as future context.</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <span className="whitespace-nowrap">Model</span>
+            <select
+              value={model}
+              onChange={(e) => {
+                setModel(e.target.value);
+                setCustomModel('');
+              }}
+              className="input-field bg-white text-black h-9 py-1"
+              style={{ minWidth: 240 }}
+              disabled={sending}
+            >
+              {DEFAULT_MODELS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+              <option value="__custom__">Custom…</option>
+            </select>
+            {model === '__custom__' && (
+              <input
+                type="text"
+                value={customModel}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCustomModel(v);
+                  // only persist when non-empty
+                  if (v.trim()) setModel(v.trim());
+                }}
+                placeholder="e.g. meta-llama/llama-3.1-70b-instruct"
+                className="input-field bg-white text-black h-9 py-1"
+                style={{ minWidth: 320 }}
+                disabled={sending}
+              />
+            )}
+          </div>
           <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
             <input
               type="checkbox"

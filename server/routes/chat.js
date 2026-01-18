@@ -5,9 +5,37 @@ const OpenAI = require('openai');
 
 const router = express.Router();
 
-// Create a local OpenAI client (keeps this route self-contained)
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+// Support OpenRouter (OpenAI-compatible) while keeping OpenAI as a fallback.
+const LLM_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+const LLM_BASE_URL =
+  process.env.OPENAI_BASE_URL ||
+  (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : undefined);
+const CHAT_MODEL =
+  process.env.OPENROUTER_MODEL ||
+  process.env.OPENAI_CHAT_MODEL ||
+  process.env.OPENAI_MODEL ||
+  (process.env.OPENROUTER_API_KEY ? 'openai/gpt-4o-mini' : 'gpt-4o-mini');
+
+const defaultHeaders = process.env.OPENROUTER_API_KEY
+  ? {
+      ...(process.env.OPENROUTER_SITE_URL ? { 'HTTP-Referer': process.env.OPENROUTER_SITE_URL } : {}),
+      ...(process.env.OPENROUTER_APP_NAME ? { 'X-Title': process.env.OPENROUTER_APP_NAME } : {})
+    }
+  : undefined;
+
+// Create a local OpenAI-compatible client
+const openai = new OpenAI({
+  apiKey: LLM_API_KEY,
+  ...(LLM_BASE_URL ? { baseURL: LLM_BASE_URL } : {}),
+  ...(defaultHeaders ? { defaultHeaders } : {})
+});
+
+function pickModel(req) {
+  const headerModel = req.headers['x-llm-model'];
+  const bodyModel = req.body?.model;
+  const m = (bodyModel || headerModel || '').toString().trim();
+  return m || CHAT_MODEL;
+}
 
 // Simple endpoint to help verify which deploy is live
 router.get('/_version', (_req, res) => {
@@ -63,9 +91,9 @@ Return ONLY the bullet points.`;
   return res.choices?.[0]?.message?.content?.trim() || null;
 }
 
-async function getAssistantReply({ memorySummaries, messages }) {
-  if (!process.env.OPENAI_API_KEY) {
-    return `AI is not configured on the server yet. Set OPENAI_API_KEY and restart the backend.`;
+async function getAssistantReply({ model, memorySummaries, messages }) {
+  if (!LLM_API_KEY) {
+    return `AI is not configured on the server yet. Set OPENROUTER_API_KEY (or OPENAI_API_KEY) and restart the backend.`;
   }
 
   const memoryBlock = (memorySummaries || []).length
@@ -76,7 +104,7 @@ async function getAssistantReply({ memorySummaries, messages }) {
 Use the saved chat memory as background context when it’s relevant. Do NOT invent details if memory doesn’t specify them.`;
 
   const res = await openai.chat.completions.create({
-    model: CHAT_MODEL,
+    model: model || CHAT_MODEL,
     messages: [
       { role: 'system', content: system },
       ...messages
@@ -192,9 +220,12 @@ router.post('/message', authenticateToken, async (req, res) => {
       : [];
 
     // Get assistant reply; if OpenAI errors, degrade gracefully instead of 500-ing the whole request.
+    const chosenModel = pickModel(req);
+
     let assistantText;
     try {
       assistantText = await getAssistantReply({
+        model: chosenModel,
         memorySummaries,
         messages: recentRows
       });

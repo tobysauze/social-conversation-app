@@ -16,6 +16,11 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Optional: user-selected LLM model (used by /api/chat and can be reused elsewhere)
+    const llmModel = localStorage.getItem('llm_model');
+    if (llmModel) {
+      config.headers['X-LLM-Model'] = llmModel;
+    }
     return config;
   },
   (error) => {

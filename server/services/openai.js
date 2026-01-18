@@ -1,8 +1,37 @@
 const OpenAI = require('openai');
 
+// Support OpenRouter (OpenAI-compatible) while keeping OpenAI as a fallback.
+// - OpenRouter: set OPENROUTER_API_KEY and (optionally) OPENROUTER_MODEL
+// - OpenAI: set OPENAI_API_KEY and (optionally) OPENAI_MODEL
+const LLM_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+const LLM_BASE_URL =
+  process.env.OPENAI_BASE_URL ||
+  (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : undefined);
+
+const DEFAULT_MODEL =
+  process.env.OPENROUTER_MODEL ||
+  process.env.OPENAI_MODEL ||
+  process.env.OPENAI_CHAT_MODEL ||
+  // good cheap default on OpenAI; on OpenRouter, prefer setting OPENROUTER_MODEL explicitly
+  (process.env.OPENROUTER_API_KEY ? 'openai/gpt-4o-mini' : 'gpt-4o-mini');
+
+const defaultHeaders = process.env.OPENROUTER_API_KEY
+  ? {
+      ...(process.env.OPENROUTER_SITE_URL ? { 'HTTP-Referer': process.env.OPENROUTER_SITE_URL } : {}),
+      ...(process.env.OPENROUTER_APP_NAME ? { 'X-Title': process.env.OPENROUTER_APP_NAME } : {})
+    }
+  : undefined;
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: LLM_API_KEY,
+  ...(LLM_BASE_URL ? { baseURL: LLM_BASE_URL } : {}),
+  ...(defaultHeaders ? { defaultHeaders } : {})
 });
+
+function getModel(override) {
+  const m = (override || '').toString().trim();
+  return m || DEFAULT_MODEL;
+}
 
 const extractStories = async (journalContent) => {
   try {
@@ -36,7 +65,7 @@ If no story-worthy content is found, return: {"stories": []}
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       max_tokens: 1000,
@@ -94,7 +123,7 @@ const refineStory = async (storyContent, tone = 'casual', duration = 30, notes =
     const prompt = buildRefinePrompt(storyContent, tone, duration, notes, existingStories);
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.9,
       max_tokens: 300,
@@ -131,7 +160,7 @@ Format as JSON:
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       max_tokens: 500,
@@ -173,7 +202,7 @@ Format as JSON:
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.6,
       max_tokens: 400,
@@ -231,7 +260,7 @@ Format your response as valid JSON (no markdown code blocks):
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       max_tokens: 1500,
@@ -320,7 +349,7 @@ Only include people who are clearly mentioned or described. Be conservative - on
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 2000,
@@ -400,7 +429,7 @@ Make sure the joke is original and creative. Avoid offensive, inappropriate, or 
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: aiPrompt }],
       temperature: 0.8,
       max_tokens: 1000,
@@ -489,7 +518,7 @@ Make sure the improved joke is genuinely funnier and more polished than the orig
 `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: getModel(),
       messages: [{ role: "user", content: aiPrompt }],
       temperature: 0.8,
       max_tokens: 1000,
@@ -577,7 +606,7 @@ Return STRICT JSON only (no markdown), like:
 }`;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: getModel(),
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       max_tokens: 400
@@ -643,7 +672,7 @@ ${journalContent}
 """`;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: getModel(),
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       max_tokens: 900
@@ -675,7 +704,7 @@ Bullet points:\n${listText || '(none)'}\n
 Return ONLY the statement text.`;
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: getModel(),
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.6,
     max_tokens: 220
