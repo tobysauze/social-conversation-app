@@ -37,6 +37,56 @@ function pickModel(req) {
   return m || CHAT_MODEL;
 }
 
+// OpenRouter model catalog (public) with lightweight caching
+let openRouterModelsCache = {
+  ts: 0,
+  data: null
+};
+const OPENROUTER_MODELS_TTL_MS = 10 * 60 * 1000;
+
+function toNumber(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pricingPerMillion(pricing) {
+  if (!pricing || typeof pricing !== 'object') return null;
+  const out = {};
+  for (const [k, v] of Object.entries(pricing)) {
+    const perToken = toNumber(v);
+    if (perToken === null) continue;
+    out[k] = perToken * 1_000_000;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+async function fetchOpenRouterModels() {
+  const now = Date.now();
+  if (openRouterModelsCache.data && now - openRouterModelsCache.ts < OPENROUTER_MODELS_TTL_MS) {
+    return openRouterModelsCache.data;
+  }
+
+  const resp = await fetch('https://openrouter.ai/api/v1/models');
+  if (!resp.ok) {
+    throw new Error(`OpenRouter models request failed: ${resp.status}`);
+  }
+  const json = await resp.json();
+  const models = Array.isArray(json?.data) ? json.data : [];
+
+  const normalized = models.map((m) => ({
+    id: m.id,
+    name: m.name,
+    description: m.description,
+    context_length: m.context_length,
+    created: m.created,
+    pricing: m.pricing || null,
+    pricing_per_million: pricingPerMillion(m.pricing)
+  }));
+
+  openRouterModelsCache = { ts: now, data: normalized };
+  return normalized;
+}
+
 // Simple endpoint to help verify which deploy is live
 router.get('/_version', (_req, res) => {
   const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : (process.env.OPENAI_API_KEY ? 'openai' : 'none');
@@ -49,6 +99,27 @@ router.get('/_version', (_req, res) => {
     db_path: dbPath,
     ts: new Date().toISOString()
   });
+});
+
+// List OpenRouter models (with pricing). Supports optional search query `q`.
+router.get('/models', authenticateToken, async (req, res) => {
+  try {
+    const q = (req.query?.q || '').toString().trim().toLowerCase();
+    const models = await fetchOpenRouterModels();
+    const filtered = q
+      ? models.filter((m) => (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q))
+      : models;
+    filtered.sort((a, b) => (a.name || a.id || '').localeCompare(b.name || b.id || ''));
+    return res.json({
+      provider: 'openrouter',
+      count: filtered.length,
+      cached_at: openRouterModelsCache.ts ? new Date(openRouterModelsCache.ts).toISOString() : null,
+      models: filtered
+    });
+  } catch (e) {
+    console.error('OpenRouter models error:', e);
+    return res.status(500).json({ error: 'Failed to load OpenRouter models' });
+  }
 });
 
 // Authenticated DB sanity check (helps debug production write failures)
