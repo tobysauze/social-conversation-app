@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { getDatabase } = require('../database/init');
+const { getDatabase, dbPath } = require('../database/init');
 const OpenAI = require('openai');
 
 const router = express.Router();
@@ -43,7 +43,8 @@ router.get('/_version', (_req, res) => {
     git: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || null,
     node: process.version,
     model: CHAT_MODEL,
-    has_openai_key: Boolean(process.env.OPENAI_API_KEY),
+    has_llm_key: Boolean(LLM_API_KEY),
+    db_path: dbPath,
     ts: new Date().toISOString()
   });
 });
@@ -68,7 +69,7 @@ function safeSummaryFallback(messages) {
 }
 
 async function summarizeConversation(messages) {
-  if (!process.env.OPENAI_API_KEY) return safeSummaryFallback(messages);
+  if (!LLM_API_KEY) return safeSummaryFallback(messages);
   const transcript = (messages || [])
     .slice(-24)
     .map(m => `${m.role.toUpperCase()}: ${m.content}`)

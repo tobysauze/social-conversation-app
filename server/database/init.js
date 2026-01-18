@@ -51,6 +51,17 @@ if (persistentDir) {
 
 const db = new Database(effectiveDbPath);
 
+// Improve reliability under concurrent access (best-effort)
+try {
+  db.pragma('journal_mode = WAL');
+} catch (_) {}
+try {
+  db.pragma('busy_timeout = 5000');
+} catch (_) {}
+try {
+  db.pragma('synchronous = NORMAL');
+} catch (_) {}
+
 const initDatabase = () => {
   try {
     // Users table
@@ -281,4 +292,4 @@ const initDatabase = () => {
 // Helper function to get database instance
 const getDatabase = () => db;
 
-module.exports = { initDatabase, getDatabase };
+module.exports = { initDatabase, getDatabase, dbPath: effectiveDbPath };
