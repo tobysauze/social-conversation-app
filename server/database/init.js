@@ -42,6 +42,10 @@ if (persistentDir) {
         console.log('Seeded persistent database from bundled DB');
       }
     }
+    // Ensure the DB file is writable (some environments preserve read-only mode on copy)
+    try {
+      fs.chmodSync(persistentDbPath, 0o664);
+    } catch (_) {}
     effectiveDbPath = persistentDbPath;
     console.log(`Using database at: ${effectiveDbPath}`);
   } catch (e) {
