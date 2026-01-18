@@ -9,6 +9,17 @@ const router = express.Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
+// Simple endpoint to help verify which deploy is live
+router.get('/_version', (_req, res) => {
+  return res.json({
+    git: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || null,
+    node: process.version,
+    model: CHAT_MODEL,
+    has_openai_key: Boolean(process.env.OPENAI_API_KEY),
+    ts: new Date().toISOString()
+  });
+});
+
 const nowSql = () => "DATETIME('now')";
 
 function makeTitleFromMessage(msg) {
@@ -128,22 +139,34 @@ router.post('/message', authenticateToken, async (req, res) => {
     const uid = req.user.userId;
 
     let convId = conversationId ? Number(conversationId) : null;
-    if (convId) {
-      const conv = db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ?').get(convId, uid);
-      if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-    } else {
-      const info = db.prepare(
-        `INSERT INTO ai_conversations (user_id, title)
-         VALUES (?, ?)`
-      ).run(uid, makeTitleFromMessage(userMessage));
-      convId = Number(info.lastInsertRowid);
-    }
+    try {
+      if (convId) {
+        const conv = db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ?').get(convId, uid);
+        if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+      } else {
+        const info = db.prepare(
+          `INSERT INTO ai_conversations (user_id, title)
+           VALUES (?, ?)`
+        ).run(uid, makeTitleFromMessage(userMessage));
+        convId = Number(info.lastInsertRowid);
+      }
 
-    // Insert user message
-    db.prepare(
-      `INSERT INTO ai_messages (conversation_id, role, content)
-       VALUES (?, ?, ?)`
-    ).run(convId, 'user', userMessage);
+      // Insert user message
+      db.prepare(
+        `INSERT INTO ai_messages (conversation_id, role, content)
+         VALUES (?, ?, ?)`
+      ).run(convId, 'user', userMessage);
+    } catch (dbWriteErr) {
+      console.error('Chat DB write failed:', dbWriteErr);
+      const msg = dbWriteErr?.message || 'Database write failed';
+      const looksReadonly = /readonly|SQLITE_READONLY/i.test(msg);
+      return res.status(500).json({
+        error: looksReadonly
+          ? 'Chat storage is read-only on the server. Configure a writable DATABASE_DIR or attach a persistent disk.'
+          : 'Failed to save chat message',
+        details: process.env.NODE_ENV === 'production' ? undefined : msg
+      });
+    }
 
     // Load recent messages for this conversation
     const recentRows = db.prepare(
