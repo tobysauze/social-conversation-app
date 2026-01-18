@@ -49,6 +49,28 @@ router.get('/_version', (_req, res) => {
   });
 });
 
+// Authenticated DB sanity check (helps debug production write failures)
+router.post('/_dbtest', authenticateToken, (req, res) => {
+  try {
+    const db = getDatabase();
+    const uid = req.user.userId;
+    const info = db
+      .prepare(`INSERT INTO ai_conversations (user_id, title) VALUES (?, ?)`)
+      .run(uid, `dbtest-${Date.now()}`);
+    const convId = Number(info.lastInsertRowid);
+    db.prepare(`DELETE FROM ai_conversations WHERE id = ? AND user_id = ?`).run(convId, uid);
+    return res.json({ ok: true, db_path: dbPath });
+  } catch (e) {
+    const msg = e?.message || 'Unknown DB error';
+    return res.status(500).json({
+      ok: false,
+      error: 'DB write failed',
+      db_path: dbPath,
+      message: msg
+    });
+  }
+});
+
 const nowSql = () => "DATETIME('now')";
 
 function makeTitleFromMessage(msg) {
@@ -193,7 +215,8 @@ router.post('/message', authenticateToken, async (req, res) => {
         error: looksReadonly
           ? 'Chat storage is read-only on the server. Configure a writable DATABASE_DIR or attach a persistent disk.'
           : 'Failed to save chat message',
-        details: process.env.NODE_ENV === 'production' ? undefined : msg
+        // Include error message so we can diagnose (permissions vs missing tables vs locks)
+        message: msg
       });
     }
 
