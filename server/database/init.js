@@ -2,25 +2,37 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+function canUseDir(dir) {
+  try {
+    if (!dir) return false;
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.accessSync(dir, fs.constants.W_OK);
+    const testFile = path.join(dir, `.writetest-${process.pid}-${Date.now()}`);
+    fs.writeFileSync(testFile, 'ok');
+    fs.unlinkSync(testFile);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 // Determine database location
 // Default: use the repo-bundled file in this directory
 const bundledDbDir = __dirname;
 const bundledDbPath = path.join(bundledDbDir, 'social_conversation.db');
 
-// Production: use a persistent disk if provided (e.g., Render disk mounted at /data)
-const persistentDir = process.env.DATABASE_DIR || (process.env.RENDER ? '/data' : null);
+// Prefer a writable persistent disk if provided (e.g., Render disk mounted at /data).
+// Fallback in production to OS temp dir to avoid "readonly database" issues.
+const candidateDirs = [
+  process.env.DATABASE_DIR,
+  process.env.RENDER ? '/data' : null,
+  process.env.NODE_ENV === 'production' ? (process.env.TMPDIR || '/tmp') : null
+].filter(Boolean);
+
+const persistentDir = candidateDirs.find(canUseDir) || null;
 let effectiveDbPath = bundledDbPath;
 
 if (persistentDir) {
-  // Ensure persistent dir exists
-  try {
-    if (!fs.existsSync(persistentDir)) {
-      fs.mkdirSync(persistentDir, { recursive: true });
-    }
-  } catch (e) {
-    console.warn('Could not create persistent DB dir, falling back to bundled path:', e?.message);
-  }
-
   const persistentDbPath = path.join(persistentDir, 'social_conversation.db');
   // Seed from bundled DB on first run if persistent DB missing
   try {
@@ -31,6 +43,7 @@ if (persistentDir) {
       }
     }
     effectiveDbPath = persistentDbPath;
+    console.log(`Using database at: ${effectiveDbPath}`);
   } catch (e) {
     console.warn('Could not use persistent DB path, falling back to bundled path:', e?.message);
   }
