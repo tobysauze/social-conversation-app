@@ -159,27 +159,27 @@ const Wellness = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-            <input type="date" value={form.date} onChange={(e)=>setForm({...form, date: e.target.value})} className="input-field" />
+            <input type="date" value={form.date} onChange={(e)=>setForm({...form, date: e.target.value})} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Diet quality (1-5)</label>
-            <input type="number" min="1" max="5" value={form.diet_quality} onChange={(e)=>setForm({...form, diet_quality: e.target.value})} className="input-field" />
+            <input type="number" min="1" max="5" value={form.diet_quality} onChange={(e)=>setForm({...form, diet_quality: e.target.value})} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Exercise minutes</label>
-            <input type="number" min="0" value={form.exercise_minutes} onChange={(e)=>setForm({...form, exercise_minutes: e.target.value})} className="input-field" />
+            <input type="number" min="0" value={form.exercise_minutes} onChange={(e)=>setForm({...form, exercise_minutes: e.target.value})} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Exercise intensity (1-5)</label>
-            <input type="number" min="1" max="5" value={form.exercise_intensity} onChange={(e)=>setForm({...form, exercise_intensity: e.target.value})} className="input-field" />
+            <input type="number" min="1" max="5" value={form.exercise_intensity} onChange={(e)=>setForm({...form, exercise_intensity: e.target.value})} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Sleep quality (1-5)</label>
-            <input type="number" min="1" max="5" value={form.sleep_quality} onChange={(e)=>setForm({...form, sleep_quality: e.target.value})} className="input-field" />
+            <input type="number" min="1" max="5" value={form.sleep_quality} onChange={(e)=>setForm({...form, sleep_quality: e.target.value})} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Sleep score</label>
-            <input type="number" min="0" max="100" value={form.sleep_score} onChange={(e)=>setForm({...form, sleep_score: e.target.value})} className="input-field" />
+            <input type="number" min="0" max="100" value={form.sleep_score} onChange={(e)=>setForm({...form, sleep_score: e.target.value})} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg)</label>
@@ -190,7 +190,7 @@ const Wellness = () => {
                 const bmi = height_m>0 && weight_kg ? (Number(weight_kg)/(height_m*height_m)).toFixed(1) : '';
                 return { ...prev, weight_kg, bmi };
               });
-            }} className="input-field" />
+            }} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Height (cm)</label>
@@ -201,15 +201,15 @@ const Wellness = () => {
                 const bmi = height_m>0 && prev.weight_kg ? (Number(prev.weight_kg)/(height_m*height_m)).toFixed(1) : '';
                 return { ...prev, height_cm, bmi };
               });
-            }} className="input-field" />
+            }} className="input-field bg-white text-black" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">BMI (auto)</label>
-            <input type="number" step="0.1" value={form.bmi} onChange={(e)=>setForm({...form, bmi: e.target.value})} className="input-field" placeholder="auto-calculated from height & weight" />
+            <input type="number" step="0.1" value={form.bmi} onChange={(e)=>setForm({...form, bmi: e.target.value})} className="input-field bg-white text-black" placeholder="auto-calculated from height & weight" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Body fat %</label>
-            <input type="number" min="0" max="100" step="0.1" value={form.body_fat_percent} onChange={(e)=>setForm({...form, body_fat_percent: e.target.value})} className="input-field" />
+            <input type="number" min="0" max="100" step="0.1" value={form.body_fat_percent} onChange={(e)=>setForm({...form, body_fat_percent: e.target.value})} className="input-field bg-white text-black" />
           </div>
         </div>
 
@@ -217,7 +217,7 @@ const Wellness = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Supplements</label>
             <div className="flex space-x-2 mb-2">
-              <input type="text" value={supp} onChange={(e)=>setSupp(e.target.value)} className="input-field flex-1" placeholder="e.g., Vitamin D" />
+              <input type="text" value={supp} onChange={(e)=>setSupp(e.target.value)} className="input-field flex-1 bg-white text-black" placeholder="e.g., Vitamin D" />
               <button type="button" onClick={()=>{addTo('supplements', supp); setSupp('');}} className="btn-primary">Add</button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -232,7 +232,7 @@ const Wellness = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Medication</label>
             <div className="flex space-x-2 mb-2">
-              <input type="text" value={med} onChange={(e)=>setMed(e.target.value)} className="input-field flex-1" placeholder="e.g., Ibuprofen 200mg" />
+              <input type="text" value={med} onChange={(e)=>setMed(e.target.value)} className="input-field flex-1 bg-white text-black" placeholder="e.g., Ibuprofen 200mg" />
               <button type="button" onClick={()=>{addTo('medication', med); setMed('');}} className="btn-primary">Add</button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -248,7 +248,7 @@ const Wellness = () => {
         <div className="mt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Diet items (recurring)</label>
           <div className="flex space-x-2 mb-2">
-            <input type="text" value={dietItem} onChange={(e)=>setDietItem(e.target.value)} className="input-field flex-1" placeholder="e.g., Oats, Coffee" />
+            <input type="text" value={dietItem} onChange={(e)=>setDietItem(e.target.value)} className="input-field flex-1 bg-white text-black" placeholder="e.g., Oats, Coffee" />
             <button type="button" onClick={()=>{addTo('diet_items', dietItem); setDietItem('');}} className="btn-primary">Add</button>
           </div>
           <div className="flex flex-wrap gap-2">

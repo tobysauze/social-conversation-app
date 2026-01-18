@@ -1,0 +1,284 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
+import { Bot, Plus, Trash2, Send, RefreshCw } from 'lucide-react';
+import { chatAPI } from '../services/api';
+
+const Chat = () => {
+  const [conversations, setConversations] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [input, setInput] = useState('');
+  const [useMemory, setUseMemory] = useState(true);
+
+  const endRef = useRef(null);
+
+  const activeConversation = useMemo(
+    () => conversations.find((c) => Number(c.id) === Number(activeId)) || null,
+    [conversations, activeId]
+  );
+
+  const scrollToBottom = () => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const loadConversations = async () => {
+    setLoadingList(true);
+    try {
+      const res = await chatAPI.listConversations();
+      const list = res.data.conversations || [];
+      setConversations(list);
+      if (!activeId && list.length) setActiveId(list[0].id);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.error || 'Failed to load conversations');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const loadMessages = async (conversationId) => {
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+    setLoadingMessages(true);
+    try {
+      const res = await chatAPI.getMessages(conversationId);
+      setMessages(res.data.messages || []);
+      setTimeout(scrollToBottom, 50);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.error || 'Failed to load messages');
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadMessages(activeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
+
+  const startNewChat = () => {
+    setActiveId(null);
+    setMessages([]);
+    setInput('');
+  };
+
+  const deleteConversation = async (conversationId) => {
+    if (!window.confirm('Delete this conversation?')) return;
+    try {
+      await chatAPI.deleteConversation(conversationId);
+      toast.success('Deleted');
+      const next = conversations.filter((c) => Number(c.id) !== Number(conversationId));
+      setConversations(next);
+      if (Number(activeId) === Number(conversationId)) {
+        setActiveId(next[0]?.id || null);
+        if (!next.length) startNewChat();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+
+    setSending(true);
+    setInput('');
+
+    // optimistic user message
+    const optimistic = { id: `tmp-${Date.now()}`, role: 'user', content: text, created_at: new Date().toISOString() };
+    setMessages((prev) => [...prev, optimistic]);
+    setTimeout(scrollToBottom, 50);
+
+    try {
+      const res = await chatAPI.sendMessage({ conversationId: activeId, message: text, useMemory });
+      const convId = res.data.conversationId;
+      const assistantText = res.data.assistant;
+
+      if (!activeId && convId) {
+        setActiveId(convId);
+        await loadConversations();
+      }
+
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== optimistic.id),
+        { id: `${Date.now()}-u`, role: 'user', content: text, created_at: optimistic.created_at },
+        { id: `${Date.now()}-a`, role: 'assistant', content: assistantText, created_at: new Date().toISOString() }
+      ]);
+      setTimeout(scrollToBottom, 50);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.error || 'Failed to send');
+      // restore input
+      setInput(text);
+      // remove optimistic
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-3">
+          <Bot className="w-7 h-7 text-primary-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">AI Chat</h1>
+            <p className="text-sm text-gray-600">Chat, save conversations, and use them as future context.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300"
+              checked={useMemory}
+              onChange={(e) => setUseMemory(e.target.checked)}
+            />
+            Use saved chats as memory
+          </label>
+          <button className="btn-secondary inline-flex items-center" onClick={loadConversations} disabled={loadingList || sending}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </button>
+          <button className="btn-primary inline-flex items-center" onClick={startNewChat} disabled={sending}>
+            <Plus className="w-4 h-4 mr-2" />
+            New chat
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Sidebar */}
+        <div className="card lg:col-span-1 h-[70vh] flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">Saved chats</h2>
+            {loadingList && <span className="text-xs text-gray-500">Loading…</span>}
+          </div>
+          <div className="overflow-auto flex-1 divide-y divide-gray-200">
+            {conversations.length === 0 ? (
+              <div className="text-sm text-gray-500 py-3">No saved chats yet.</div>
+            ) : (
+              conversations.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setActiveId(c.id)}
+                  className={`w-full text-left py-3 px-2 rounded-md hover:bg-gray-50 transition-colors ${
+                    Number(activeId) === Number(c.id) ? 'bg-primary-50' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{c.title || 'Untitled'}</div>
+                      <div className="text-xs text-gray-600 truncate">{c.summary || '—'}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                      title="Delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteConversation(c.id);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Chat window */}
+        <div className="card lg:col-span-2 h-[70vh] flex flex-col">
+          <div className="border-b border-gray-200 pb-3 mb-3">
+            <div className="text-sm font-semibold text-gray-900">
+              {activeConversation ? activeConversation.title || 'Chat' : 'New chat'}
+            </div>
+            <div className="text-xs text-gray-600">
+              {activeConversation?.summary ? `Memory summary: ${activeConversation.summary}` : 'Send a message to begin.'}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto space-y-3 pr-2">
+            {loadingMessages ? (
+              <div className="text-sm text-gray-500">Loading…</div>
+            ) : messages.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                Ask anything you’re thinking about. Your chats are saved and can be used as context later.
+              </div>
+            ) : (
+              messages.map((m) => (
+                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
+                      m.role === 'user'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-white border border-gray-200 text-gray-900'
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))
+            )}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-white border border-gray-200 text-gray-600">
+                  Thinking…
+                </div>
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+
+          <div className="pt-3 border-t border-gray-200 mt-3">
+            <div className="flex items-end gap-3">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={2}
+                className="input-field flex-1 bg-white text-black placeholder-gray-400"
+                placeholder="Type your message… (Enter to send, Shift+Enter for newline)"
+                disabled={sending}
+              />
+              <button className="btn-primary inline-flex items-center" onClick={send} disabled={sending || !input.trim()}>
+                <Send className="w-4 h-4 mr-2" />
+                Send
+              </button>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Note: If OPENAI_API_KEY isn’t set on the server, you’ll get a friendly “AI not configured” response.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Chat;
+

@@ -72,7 +72,7 @@ const Login = () => {
                 required
                 value={formData.username}
                 onChange={handleChange}
-                className="mt-1 input-field"
+                className="mt-1 input-field bg-white text-black placeholder-gray-400"
                 placeholder="Enter your username"
               />
             </div>
@@ -90,7 +90,7 @@ const Login = () => {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="input-field pr-10"
+                  className="input-field pr-10 bg-white text-black placeholder-gray-400"
                   placeholder="Enter your password"
                 />
                 <button

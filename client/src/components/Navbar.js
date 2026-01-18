@@ -14,7 +14,9 @@ import {
   Laugh,
   Heart,
   Brain,
-  Target as TargetIcon
+  Target as TargetIcon,
+  Dna,
+  Bot
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -32,7 +34,9 @@ const Navbar = () => {
     { name: 'Wellness', href: '/wellness', icon: Heart },
     { name: 'Coach', href: '/coach', icon: Brain },
     { name: 'Identity', href: '/identity', icon: User },
-    { name: 'Goals', href: '/goals', icon: TargetIcon }
+    { name: 'Goals', href: '/goals', icon: TargetIcon },
+    { name: 'Genome', href: '/genome', icon: Dna },
+    { name: 'AI Chat', href: '/chat', icon: Bot }
   ];
 
   const isActive = (path) => location.pathname === path;

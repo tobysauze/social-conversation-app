@@ -17,6 +17,8 @@ import Wellness from './pages/Wellness';
 import Coach from './pages/Coach';
 import Identity from './pages/Identity';
 import Goals from './pages/Goals';
+import Genome from './pages/Genome';
+import Chat from './pages/Chat';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -165,6 +167,22 @@ function AppContent() {
                 <Coach />
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/genome"
+            element={
+              <ProtectedRoute>
+                <Genome />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <Chat />
+              </ProtectedRoute>
+            }
           />
           
           {/* Catch all route */}

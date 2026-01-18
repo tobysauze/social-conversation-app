@@ -20,12 +20,28 @@ router.post('/register', async (req, res) => {
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) return res.status(400).json({ error: 'User already exists' });
+    let created = null;
+    try {
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing) return res.status(400).json({ error: 'User already exists' });
 
-    const created = await prisma.user.create({
-      data: { email, password: passwordHash, name }
-    });
+      created = await prisma.user.create({
+        data: { email, password: passwordHash, name }
+      });
+    } catch (e) {
+      // Fallback to bundled SQLite
+      const db = getDatabase();
+      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+      if (existing) return res.status(400).json({ error: 'User already exists' });
+
+      const info = db
+        .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
+        .run(email, passwordHash, name);
+      const row = db
+        .prepare('SELECT id, email, name FROM users WHERE id = ?')
+        .get(info.lastInsertRowid);
+      created = { id: row.id, email: row.email, name: row.name };
+    }
 
     const token = jwt.sign(
       { userId: created.id, email: created.email },
@@ -67,16 +83,9 @@ router.post('/login', async (req, res) => {
     if (usedSQLiteFallback) {
       try {
         const db = getDatabase();
-        user = await new Promise((resolve, reject) => {
-          db.get(
-            'SELECT id, email, name, password_hash FROM users WHERE name = ?',
-            [username],
-            (err, row) => {
-              if (err) return reject(err);
-              resolve(row || null);
-            }
-          );
-        });
+        user = db
+          .prepare('SELECT id, email, name, password_hash FROM users WHERE name = ?')
+          .get(username) || null;
 
         if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
@@ -126,10 +135,22 @@ router.post('/login', async (req, res) => {
 // Get current user
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { id: true, email: true, name: true, createdAt: true }
-    });
+    let user = null;
+    try {
+      user = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { id: true, email: true, name: true, createdAt: true }
+      });
+    } catch (e) {
+      // Fallback to SQLite
+      const db = getDatabase();
+      const row = db
+        .prepare('SELECT id, email, name, created_at FROM users WHERE id = ?')
+        .get(req.user.userId);
+      user = row
+        ? { id: row.id, email: row.email, name: row.name, createdAt: row.created_at }
+        : null;
+    }
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://social-conversation-app.onrender.com/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://social-conversation-app.onrender.com/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -145,6 +145,36 @@ export const goalsAPI = {
   create: (data) => api.post('/goals', data),
   update: (id, data) => api.patch(`/goals/${id}`, data),
   remove: (id) => api.delete(`/goals/${id}`)
+};
+
+// AI Chat API
+export const chatAPI = {
+  listConversations: () => api.get('/chat/conversations'),
+  getMessages: (conversationId) => api.get(`/chat/conversations/${conversationId}/messages`),
+  sendMessage: ({ conversationId, message, useMemory = true }) =>
+    api.post('/chat/message', { conversationId, message, useMemory }),
+  deleteConversation: (conversationId) => api.delete(`/chat/conversations/${conversationId}`)
+};
+
+// Genome upload API
+export const genomeAPI = {
+  list: () => api.get('/genome'),
+  upload: (file, onProgress) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/genome/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (evt) => {
+        if (!onProgress) return;
+        const total = evt.total || 0;
+        if (!total) return;
+        const pct = Math.round((evt.loaded / total) * 100);
+        onProgress(pct);
+      }
+    });
+  },
+  remove: (id) => api.delete(`/genome/${id}`),
+  downloadUrl: (id) => `${API_BASE_URL}/genome/${id}/download`
 };
 
 export default api;

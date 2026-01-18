@@ -206,6 +206,57 @@ const initDatabase = () => {
       )
     `);
 
+    // AI chat conversations (saved "memory")
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT,
+        summary TEXT, -- short summary used as memory context for future chats
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_updated
+      ON ai_conversations(user_id, updated_at)
+    `);
+
+    // AI chat messages
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL,
+        role TEXT NOT NULL, -- 'user' | 'assistant' | 'system'
+        content TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (conversation_id) REFERENCES ai_conversations (id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation_id_id
+      ON ai_messages(conversation_id, id)
+    `);
+
+    // Genome uploads metadata (file stored on disk)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS genome_uploads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        original_name TEXT NOT NULL,
+        stored_name TEXT NOT NULL,
+        mime_type TEXT,
+        size_bytes INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_genome_uploads_user_id_created_at
+      ON genome_uploads(user_id, created_at)
+    `);
+
     console.log('✅ Database tables created successfully');
     return Promise.resolve();
   } catch (error) {

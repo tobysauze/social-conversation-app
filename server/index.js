@@ -17,6 +17,9 @@ const coachRoutes = require('./routes/coach');
 const identityRoutes = require('./routes/identity');
 const goalsRoutes = require('./routes/goals');
 const wellnessImportRoutes = require('./routes/wellness_import');
+const chatRoutes = require('./routes/chat');
+const genomeRoutes = require('./routes/genome');
+const { initDatabase } = require('./database/init');
 // Prisma client (Postgres)
 let prisma = null;
 try {
@@ -28,6 +31,13 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Ensure SQLite tables exist (no-op if already created)
+try {
+  initDatabase();
+} catch (e) {
+  console.warn('SQLite initDatabase failed:', e?.message);
+}
 
 // Security middleware
 app.use(helmet());
@@ -90,6 +100,8 @@ app.use('/api/coach', coachRoutes);
 app.use('/api/identity', identityRoutes);
 app.use('/api/goals', goalsRoutes);
 app.use('/api/wellness-import', wellnessImportRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/genome', genomeRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

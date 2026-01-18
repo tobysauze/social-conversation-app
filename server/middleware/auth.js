@@ -20,18 +20,15 @@ const authenticateToken = (req, res, next) => {
 
 const getUserById = (userId) => {
   return new Promise((resolve, reject) => {
-    const db = getDatabase();
-    db.get(
-      'SELECT id, email, name, created_at FROM users WHERE id = ?',
-      [userId],
-      (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      }
-    );
+    try {
+      const db = getDatabase();
+      const row = db
+        .prepare('SELECT id, email, name, created_at FROM users WHERE id = ?')
+        .get(userId);
+      resolve(row || null);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 

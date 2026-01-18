@@ -262,16 +262,25 @@ router.get('/person/:personId', authenticateToken, async (req, res) => {
 router.post('/:jokeId/iterate', authenticateToken, async (req, res) => {
   const { jokeId } = req.params;
   const { conversationHistory = [] } = req.body;
-  const db = null;
 
   try {
-    // Get the joke
-    const joke = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM jokes WHERE id = ? AND user_id = ?', [jokeId, req.user.userId], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
+    // Get the joke (Prisma first, fallback to SQLite)
+    let joke = null;
+    try {
+      joke = await prisma.joke.findFirst({
+        where: { id: Number(jokeId), userId: req.user.userId },
+        select: { title: true, content: true, category: true, difficulty: true }
       });
-    });
+    } catch (e) {
+      // ignore, fall back below
+    }
+
+    if (!joke) {
+      const db = getDatabase();
+      joke = db
+        .prepare('SELECT title, content, category, difficulty FROM jokes WHERE id = ? AND user_id = ?')
+        .get(Number(jokeId), req.user.userId);
+    }
 
     if (!joke) {
       return res.status(404).json({ error: 'Joke not found' });

@@ -119,29 +119,23 @@ router.post('/extract/:journalId', authenticateToken, async (req, res) => {
     const { journalId } = req.params;
     const db = getDatabase();
 
-    // Get the journal entry
-    db.get(
-      'SELECT * FROM journal_entries WHERE id = ? AND user_id = ?',
-      [journalId, req.user.userId],
-      async (err, entry) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+    // Get the journal entry (better-sqlite3 is sync)
+    const entry = db
+      .prepare('SELECT * FROM journal_entries WHERE id = ? AND user_id = ?')
+      .get(Number(journalId), req.user.userId);
 
-        if (!entry) {
-          return res.status(404).json({ error: 'Journal entry not found' });
-        }
+    if (!entry) {
+      return res.status(404).json({ error: 'Journal entry not found' });
+    }
 
-        try {
-          // Extract stories using OpenAI
-          const extractedStories = await extractStories(entry.content);
-          res.json({ stories: extractedStories.stories });
-        } catch (error) {
-          console.error('Story extraction error:', error);
-          res.status(500).json({ error: 'Failed to extract stories' });
-        }
-      }
-    );
+    try {
+      // Extract stories using OpenAI
+      const extractedStories = await extractStories(entry.content);
+      return res.json({ stories: extractedStories.stories });
+    } catch (error) {
+      console.error('Story extraction error:', error);
+      return res.status(500).json({ error: 'Failed to extract stories' });
+    }
   } catch (error) {
     console.error('Extract stories error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -303,37 +297,57 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
 router.get('/:id/conversation-starters', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const db = null;
 
-    // Get the story
-    db.get(
-      'SELECT * FROM stories WHERE id = ? AND user_id = ?',
-      [id, req.user.userId],
-      async (err, story) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+    // Get the story content (Prisma first, fallback to SQLite)
+    let story = null;
+    try {
+      story = await prisma.story.findFirst({
+        where: { id: Number(id), userId: req.user.userId },
+        select: { content: true }
+      });
+    } catch (e) {
+      // ignore, fall back below
+    }
 
-        if (!story) {
-          return res.status(404).json({ error: 'Story not found' });
-        }
+    if (!story) {
+      const db = getDatabase();
+      story = db
+        .prepare('SELECT content FROM stories WHERE id = ? AND user_id = ?')
+        .get(Number(id), req.user.userId);
+    }
 
-        try {
-          const starters = await generateConversationStarters(story.content);
-          await Promise.all(
-            starters.questions.map((question) =>
-              prisma.conversationStarter.create({
-                data: { userId: req.user.userId, storyId: Number(id), question }
-              })
-            )
-          );
-          res.json({ conversation_starters: starters.questions });
-        } catch (error) {
-          console.error('Conversation starters error:', error);
-          res.status(500).json({ error: 'Failed to generate conversation starters' });
-        }
+    if (!story) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+
+    try {
+      const starters = await generateConversationStarters(story.content);
+
+      // Persist starters (Prisma first, fallback to SQLite)
+      try {
+        await Promise.all(
+          starters.questions.map((question) =>
+            prisma.conversationStarter.create({
+              data: { userId: req.user.userId, storyId: Number(id), question }
+            })
+          )
+        );
+      } catch (e) {
+        const db = getDatabase();
+        const stmt = db.prepare(
+          'INSERT INTO conversation_starters (user_id, story_id, question) VALUES (?, ?, ?)'
+        );
+        const insertMany = db.transaction((questions) => {
+          for (const q of questions) stmt.run(req.user.userId, Number(id), q);
+        });
+        insertMany(starters.questions);
       }
-    );
+
+      return res.json({ conversation_starters: starters.questions });
+    } catch (error) {
+      console.error('Conversation starters error:', error);
+      return res.status(500).json({ error: 'Failed to generate conversation starters' });
+    }
   } catch (error) {
     console.error('Generate conversation starters error:', error);
     res.status(500).json({ error: 'Internal server error' });
