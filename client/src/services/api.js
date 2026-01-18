@@ -158,7 +158,8 @@ export const chatAPI = {
   getMessages: (conversationId) => api.get(`/chat/conversations/${conversationId}/messages`),
   sendMessage: ({ conversationId, message, useMemory = true }) =>
     api.post('/chat/message', { conversationId, message, useMemory }),
-  deleteConversation: (conversationId) => api.delete(`/chat/conversations/${conversationId}`)
+  deleteConversation: (conversationId) => api.delete(`/chat/conversations/${conversationId}`),
+  version: () => api.get('/chat/_version')
 };
 
 // Genome upload API

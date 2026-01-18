@@ -39,9 +39,11 @@ function pickModel(req) {
 
 // Simple endpoint to help verify which deploy is live
 router.get('/_version', (_req, res) => {
+  const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : (process.env.OPENAI_API_KEY ? 'openai' : 'none');
   return res.json({
     git: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || null,
     node: process.version,
+    provider,
     model: CHAT_MODEL,
     has_llm_key: Boolean(LLM_API_KEY),
     db_path: dbPath,

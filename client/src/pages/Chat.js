@@ -4,11 +4,15 @@ import { Bot, Plus, Trash2, Send, RefreshCw } from 'lucide-react';
 import { chatAPI } from '../services/api';
 
 const MODEL_STORAGE_KEY = 'llm_model';
-const DEFAULT_MODELS = [
+const OPENROUTER_MODELS = [
   { label: 'OpenAI: GPT-4o mini', value: 'openai/gpt-4o-mini' },
   { label: 'OpenAI: GPT-4o', value: 'openai/gpt-4o' },
   { label: 'Anthropic: Claude 3.5 Sonnet', value: 'anthropic/claude-3.5-sonnet' },
   { label: 'Google: Gemini 1.5 Pro', value: 'google/gemini-1.5-pro' }
+];
+const OPENAI_MODELS = [
+  { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
+  { label: 'GPT-4o', value: 'gpt-4o' }
 ];
 
 const Chat = () => {
@@ -20,7 +24,9 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState('');
   const [useMemory, setUseMemory] = useState(true);
-  const [model, setModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODELS[0].value);
+  const [provider, setProvider] = useState(null); // 'openrouter' | 'openai' | 'none'
+  const [defaultModel, setDefaultModel] = useState(null);
+  const [model, setModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || 'openai/gpt-4o-mini');
   const [customModel, setCustomModel] = useState('');
 
   const endRef = useRef(null);
@@ -68,7 +74,32 @@ const Chat = () => {
   };
 
   useEffect(() => {
-    loadConversations();
+    (async () => {
+      try {
+        const v = await chatAPI.version();
+        const p = v.data?.provider || null;
+        const dm = v.data?.model || null;
+        setProvider(p);
+        setDefaultModel(dm);
+
+        const allowed = new Set((p === 'openai' ? OPENAI_MODELS : OPENROUTER_MODELS).map((m) => m.value));
+        const stored = localStorage.getItem(MODEL_STORAGE_KEY);
+        const initial = stored || dm || (p === 'openai' ? OPENAI_MODELS[0].value : OPENROUTER_MODELS[0].value);
+
+        if (!allowed.has(initial) && initial !== '__custom__') {
+          const fallback = dm || (p === 'openai' ? OPENAI_MODELS[0].value : OPENROUTER_MODELS[0].value);
+          setModel(fallback);
+          try { localStorage.setItem(MODEL_STORAGE_KEY, fallback); } catch (_) {}
+          toast.error('Selected model is not available on the current backend provider. Switched to a supported model.');
+        } else if (initial) {
+          setModel(initial);
+        }
+      } catch (e) {
+        console.error(e);
+        // If version fails, keep previous behavior
+      }
+      loadConversations();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -77,6 +108,11 @@ const Chat = () => {
       if (model) localStorage.setItem(MODEL_STORAGE_KEY, model);
     } catch (_) {}
   }, [model]);
+
+  const availableModels = useMemo(() => {
+    if (provider === 'openai') return OPENAI_MODELS;
+    return OPENROUTER_MODELS;
+  }, [provider]);
 
   useEffect(() => {
     loadMessages(activeId);
@@ -176,14 +212,14 @@ const Chat = () => {
               style={{ minWidth: 240 }}
               disabled={sending}
             >
-              {DEFAULT_MODELS.map((m) => (
+              {availableModels.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
                 </option>
               ))}
-              <option value="__custom__">Custom…</option>
+              {provider !== 'openai' && <option value="__custom__">Custom…</option>}
             </select>
-            {model === '__custom__' && (
+            {provider !== 'openai' && model === '__custom__' && (
               <input
                 type="text"
                 value={customModel}
