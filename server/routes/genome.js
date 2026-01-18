@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { authenticateToken } = require('../middleware/auth');
-const { getDatabase } = require('../database/init');
+const { getDatabase, ensureSqliteUser } = require('../database/init');
 
 const router = express.Router();
 
@@ -62,6 +62,7 @@ router.post('/upload', authenticateToken, upload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file is required' });
     const db = getDatabase();
+    ensureSqliteUser({ id: req.user.userId, email: req.user.email, name: req.user.email });
     const info = db.prepare(
       `INSERT INTO genome_uploads (user_id, original_name, stored_name, mime_type, size_bytes)
        VALUES (?, ?, ?, ?, ?)`

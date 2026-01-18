@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { getDatabase, dbPath } = require('../database/init');
+const { getDatabase, dbPath, ensureSqliteUser } = require('../database/init');
 const OpenAI = require('openai');
 
 const router = express.Router();
@@ -54,6 +54,7 @@ router.post('/_dbtest', authenticateToken, (req, res) => {
   try {
     const db = getDatabase();
     const uid = req.user.userId;
+    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
     const info = db
       .prepare(`INSERT INTO ai_conversations (user_id, title) VALUES (?, ?)`)
       .run(uid, `dbtest-${Date.now()}`);
@@ -188,6 +189,7 @@ router.post('/message', authenticateToken, async (req, res) => {
   try {
     const db = getDatabase();
     const uid = req.user.userId;
+    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
 
     let convId = conversationId ? Number(conversationId) : null;
     try {

@@ -296,4 +296,36 @@ const initDatabase = () => {
 // Helper function to get database instance
 const getDatabase = () => db;
 
-module.exports = { initDatabase, getDatabase, dbPath: effectiveDbPath };
+// Ensure a user row exists in SQLite for FK constraints (when auth comes from Postgres/Prisma).
+// This keeps legacy SQLite tables working in production.
+function ensureSqliteUser({ id, email, name }) {
+  const userId = Number(id);
+  if (!userId) return;
+
+  const safeEmail = (email && String(email).trim()) || `user${userId}@local`;
+  const safeName = (name && String(name).trim()) || safeEmail;
+  const passwordHash = 'external-auth'; // placeholder; not used when auth is via JWT/Prisma
+
+  // If the ID exists, we're done
+  const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+  if (existing) return;
+
+  // Insert with explicit id (SQLite allows this even with AUTOINCREMENT)
+  try {
+    db.prepare(
+      `INSERT INTO users (id, email, password_hash, name)
+       VALUES (?, ?, ?, ?)`
+    ).run(userId, safeEmail, passwordHash, safeName);
+  } catch (e) {
+    // Best-effort: if email is taken, fall back to a unique placeholder.
+    const fallbackEmail = `user${userId}-${Date.now()}@local`;
+    try {
+      db.prepare(
+        `INSERT INTO users (id, email, password_hash, name)
+         VALUES (?, ?, ?, ?)`
+      ).run(userId, fallbackEmail, passwordHash, safeName);
+    } catch (_) {}
+  }
+}
+
+module.exports = { initDatabase, getDatabase, dbPath: effectiveDbPath, ensureSqliteUser };
