@@ -7,6 +7,7 @@ const router = express.Router();
 
 // Create a local OpenAI client (keeps this route self-contained)
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
 const nowSql = () => "DATETIME('now')";
 
@@ -43,7 +44,7 @@ Conversation:\n${transcript}\n
 Return ONLY the bullet points.`;
 
   const res = await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: CHAT_MODEL,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.3,
     max_tokens: 260
@@ -64,7 +65,7 @@ async function getAssistantReply({ memorySummaries, messages }) {
 Use the saved chat memory as background context when it’s relevant. Do NOT invent details if memory doesn’t specify them.`;
 
   const res = await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: CHAT_MODEL,
     messages: [
       { role: 'system', content: system },
       ...messages
@@ -167,10 +168,21 @@ router.post('/message', authenticateToken, async (req, res) => {
         ).all(uid, convId).map(r => r.summary)
       : [];
 
-    const assistantText = await getAssistantReply({
-      memorySummaries,
-      messages: recentRows
-    });
+    // Get assistant reply; if OpenAI errors, degrade gracefully instead of 500-ing the whole request.
+    let assistantText;
+    try {
+      assistantText = await getAssistantReply({
+        memorySummaries,
+        messages: recentRows
+      });
+    } catch (aiErr) {
+      console.error('AI chat completion failed:', aiErr);
+      const msg = aiErr?.message || 'Unknown error';
+      assistantText =
+        process.env.NODE_ENV === 'production'
+          ? `The AI service is temporarily unavailable. Please try again in a minute.`
+          : `AI call failed: ${msg}`;
+    }
 
     // Insert assistant message
     db.prepare(
