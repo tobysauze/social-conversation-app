@@ -42,6 +42,7 @@ const Chat = () => {
   const [allModels, setAllModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [showModelBrowser, setShowModelBrowser] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const endRef = useRef(null);
 
@@ -296,51 +297,82 @@ const Chat = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sidebar */}
-        <div className="card lg:col-span-1 h-[70vh] flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Saved chats</h2>
-            {loadingList && <span className="text-xs text-gray-500">Loading…</span>}
-          </div>
-          <div className="overflow-auto flex-1 divide-y divide-gray-200">
-            {conversations.length === 0 ? (
-              <div className="text-sm text-gray-500 py-3">No saved chats yet.</div>
-            ) : (
-              conversations.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setActiveId(c.id)}
-                  className={`w-full text-left py-3 px-2 rounded-md hover:bg-gray-50 transition-colors ${
-                    Number(activeId) === Number(c.id) ? 'bg-primary-50' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">{c.title || 'Untitled'}</div>
-                      <div className="text-xs text-gray-600 truncate">{c.summary || '—'}</div>
+      <div className="relative flex gap-6">
+        {/* Collapsible sidebar */}
+        <div
+          className={`hidden lg:flex flex-col transition-[width,opacity] duration-200 ease-out ${
+            sidebarOpen ? 'w-[340px] opacity-100' : 'w-0 opacity-0'
+          }`}
+          aria-hidden={!sidebarOpen}
+        >
+          <div className="card h-[70vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-gray-900">Saved chats</h2>
+                {loadingList && <span className="text-xs text-gray-500">Loading…</span>}
+              </div>
+              <button
+                type="button"
+                className="text-xs text-gray-500 hover:text-gray-700"
+                onClick={() => setSidebarOpen(false)}
+                title="Collapse"
+              >
+                Collapse
+              </button>
+            </div>
+            <div className="overflow-auto flex-1 divide-y divide-gray-200">
+              {conversations.length === 0 ? (
+                <div className="text-sm text-gray-500 py-3">No saved chats yet.</div>
+              ) : (
+                conversations.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setActiveId(c.id)}
+                    className={`w-full text-left py-3 px-2 rounded-md hover:bg-gray-50 transition-colors ${
+                      Number(activeId) === Number(c.id) ? 'bg-primary-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">{c.title || 'Untitled'}</div>
+                        <div className="text-xs text-gray-600 truncate">{c.summary || '—'}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteConversation(c.id);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                      title="Delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteConversation(c.id);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </button>
-              ))
-            )}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Chat window */}
-        <div className="card lg:col-span-2 h-[70vh] flex flex-col">
+        {/* Sticky "tab" handle when sidebar is collapsed */}
+        <button
+          type="button"
+          className={`hidden lg:flex items-center justify-center absolute top-28 z-10 transition-all duration-200 ${
+            sidebarOpen ? 'left-[340px] opacity-0 pointer-events-none' : 'left-0 opacity-100'
+          }`}
+          onClick={() => setSidebarOpen(true)}
+          title="Show saved chats"
+        >
+          <div className="bg-primary-600 text-white px-2 py-3 rounded-r-lg shadow-md text-xs font-semibold tracking-wide">
+            Saved
+          </div>
+        </button>
+
+        {/* Chat window (full remaining width) */}
+        <div className="card flex-1 h-[70vh] flex flex-col">
           <div className="border-b border-gray-200 pb-3 mb-3">
             <div className="text-sm font-semibold text-gray-900">
               {activeConversation ? activeConversation.title || 'Chat' : 'New chat'}
