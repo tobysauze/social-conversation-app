@@ -5,16 +5,12 @@ const OpenAI = require('openai');
 
 const router = express.Router();
 
-// Support OpenRouter (OpenAI-compatible) while keeping OpenAI as a fallback.
-const LLM_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-const LLM_BASE_URL =
-  process.env.OPENAI_BASE_URL ||
-  (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : undefined);
+// OpenRouter-only (OpenAI-compatible API)
+const LLM_API_KEY = process.env.OPENROUTER_API_KEY;
+const LLM_BASE_URL = 'https://openrouter.ai/api/v1';
 const CHAT_MODEL =
   process.env.OPENROUTER_MODEL ||
-  process.env.OPENAI_CHAT_MODEL ||
-  process.env.OPENAI_MODEL ||
-  (process.env.OPENROUTER_API_KEY ? 'openai/gpt-4o-mini' : 'gpt-4o-mini');
+  'openai/gpt-4o-mini';
 
 const defaultHeaders = process.env.OPENROUTER_API_KEY
   ? {
@@ -89,7 +85,7 @@ async function fetchOpenRouterModels() {
 
 // Simple endpoint to help verify which deploy is live
 router.get('/_version', (_req, res) => {
-  const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : (process.env.OPENAI_API_KEY ? 'openai' : 'none');
+  const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : 'none';
   return res.json({
     git: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || null,
     node: process.version,
@@ -190,7 +186,7 @@ Return ONLY the bullet points.`;
 
 async function getAssistantReply({ model, memorySummaries, messages }) {
   if (!LLM_API_KEY) {
-    return `AI is not configured on the server yet. Set OPENROUTER_API_KEY (or OPENAI_API_KEY) and restart the backend.`;
+    return `AI is not configured on the server yet. Set OPENROUTER_API_KEY and restart the backend.`;
   }
 
   const memoryBlock = (memorySummaries || []).length

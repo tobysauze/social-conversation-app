@@ -10,10 +10,6 @@ const OPENROUTER_MODELS = [
   { label: 'Anthropic: Claude 3.5 Sonnet', value: 'anthropic/claude-3.5-sonnet' },
   { label: 'Google: Gemini 1.5 Pro', value: 'google/gemini-1.5-pro' }
 ];
-const OPENAI_MODELS = [
-  { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-  { label: 'GPT-4o', value: 'gpt-4o' }
-];
 
 const fmtCost = (v) => {
   if (v === null || v === undefined) return '—';
@@ -34,7 +30,7 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState('');
   const [useMemory, setUseMemory] = useState(true);
-  const [provider, setProvider] = useState(null); // 'openrouter' | 'openai' | 'none'
+  const [provider, setProvider] = useState(null); // 'openrouter' | 'none'
   const [defaultModel, setDefaultModel] = useState(null);
   const [model, setModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || 'openai/gpt-4o-mini');
   const [customModel, setCustomModel] = useState('');
@@ -97,12 +93,12 @@ const Chat = () => {
         setProvider(p);
         setDefaultModel(dm);
 
-        const allowed = new Set((p === 'openai' ? OPENAI_MODELS : OPENROUTER_MODELS).map((m) => m.value));
+        const allowed = new Set(OPENROUTER_MODELS.map((m) => m.value));
         const stored = localStorage.getItem(MODEL_STORAGE_KEY);
-        const initial = stored || dm || (p === 'openai' ? OPENAI_MODELS[0].value : OPENROUTER_MODELS[0].value);
+        const initial = stored || dm || OPENROUTER_MODELS[0].value;
 
         if (!allowed.has(initial) && initial !== '__custom__') {
-          const fallback = dm || (p === 'openai' ? OPENAI_MODELS[0].value : OPENROUTER_MODELS[0].value);
+          const fallback = dm || OPENROUTER_MODELS[0].value;
           setModel(fallback);
           try { localStorage.setItem(MODEL_STORAGE_KEY, fallback); } catch (_) {}
           toast.error('Selected model is not available on the current backend provider. Switched to a supported model.');
@@ -144,10 +140,7 @@ const Chat = () => {
     } catch (_) {}
   }, [model]);
 
-  const availableModels = useMemo(() => {
-    if (provider === 'openai') return OPENAI_MODELS;
-    return OPENROUTER_MODELS;
-  }, [provider]);
+  const availableModels = useMemo(() => OPENROUTER_MODELS, []);
 
   const openRouterVisible = useMemo(() => {
     const q = modelQuery.trim().toLowerCase();
@@ -431,7 +424,7 @@ const Chat = () => {
               </button>
             </div>
             <div className="text-xs text-gray-500 mt-2">
-              Note: If OPENAI_API_KEY isn’t set on the server, you’ll get a friendly “AI not configured” response.
+              Note: If OPENROUTER_API_KEY isn’t set on the server, you’ll get a friendly “AI not configured” response.
             </div>
           </div>
         </div>

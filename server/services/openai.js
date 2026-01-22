@@ -1,19 +1,11 @@
 const OpenAI = require('openai');
 
-// Support OpenRouter (OpenAI-compatible) while keeping OpenAI as a fallback.
-// - OpenRouter: set OPENROUTER_API_KEY and (optionally) OPENROUTER_MODEL
-// - OpenAI: set OPENAI_API_KEY and (optionally) OPENAI_MODEL
-const LLM_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-const LLM_BASE_URL =
-  process.env.OPENAI_BASE_URL ||
-  (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : undefined);
+// OpenRouter-only (OpenAI-compatible API)
+// Set OPENROUTER_API_KEY and (optionally) OPENROUTER_MODEL.
+const LLM_API_KEY = process.env.OPENROUTER_API_KEY;
+const LLM_BASE_URL = 'https://openrouter.ai/api/v1';
 
-const DEFAULT_MODEL =
-  process.env.OPENROUTER_MODEL ||
-  process.env.OPENAI_MODEL ||
-  process.env.OPENAI_CHAT_MODEL ||
-  // good cheap default on OpenAI; on OpenRouter, prefer setting OPENROUTER_MODEL explicitly
-  (process.env.OPENROUTER_API_KEY ? 'openai/gpt-4o-mini' : 'gpt-4o-mini');
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
 const defaultHeaders = process.env.OPENROUTER_API_KEY
   ? {
@@ -24,7 +16,7 @@ const defaultHeaders = process.env.OPENROUTER_API_KEY
 
 const openai = new OpenAI({
   apiKey: LLM_API_KEY,
-  ...(LLM_BASE_URL ? { baseURL: LLM_BASE_URL } : {}),
+  baseURL: LLM_BASE_URL,
   ...(defaultHeaders ? { defaultHeaders } : {})
 });
 

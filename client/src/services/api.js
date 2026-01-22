@@ -152,6 +152,14 @@ export const goalsAPI = {
   remove: (id) => api.delete(`/goals/${id}`)
 };
 
+// Triggers API
+export const triggersAPI = {
+  list: () => api.get('/triggers'),
+  create: (data) => api.post('/triggers', data),
+  update: (id, data) => api.patch(`/triggers/${id}`, data),
+  remove: (id) => api.delete(`/triggers/${id}`)
+};
+
 // AI Chat API
 export const chatAPI = {
   listConversations: () => api.get('/chat/conversations'),

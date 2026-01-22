@@ -19,6 +19,7 @@ import Identity from './pages/Identity';
 import Goals from './pages/Goals';
 import Genome from './pages/Genome';
 import Chat from './pages/Chat';
+import Triggers from './pages/Triggers';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -181,6 +182,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/triggers"
+            element={
+              <ProtectedRoute>
+                <Triggers />
               </ProtectedRoute>
             }
           />

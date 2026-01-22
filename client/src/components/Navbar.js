@@ -17,6 +17,7 @@ import {
   Target as TargetIcon,
   Dna,
   Bot,
+  AlertTriangle,
   MoreHorizontal,
   ChevronDown
 } from 'lucide-react';
@@ -40,7 +41,8 @@ const Navbar = () => {
     { name: 'Identity', href: '/identity', icon: User },
     { name: 'Goals', href: '/goals', icon: TargetIcon },
     { name: 'Genome', href: '/genome', icon: Dna },
-    { name: 'AI Chat', href: '/chat', icon: Bot }
+    { name: 'AI Chat', href: '/chat', icon: Bot },
+    { name: 'Triggers', href: '/triggers', icon: AlertTriangle }
   ];
 
   const primaryNav = useMemo(() => {
