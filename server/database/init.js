@@ -285,6 +285,25 @@ const initDatabase = () => {
       ON genome_uploads(user_id, created_at)
     `);
 
+    // Anxiety triggers (user-defined)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS anxiety_triggers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        category TEXT,
+        intensity INTEGER, -- 1-10
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_anxiety_triggers_user_updated
+      ON anxiety_triggers(user_id, updated_at)
+    `);
+
     console.log('✅ Database tables created successfully');
     return Promise.resolve();
   } catch (error) {
