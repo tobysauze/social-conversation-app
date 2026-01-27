@@ -18,7 +18,6 @@ import {
   Dna,
   Bot,
   AlertTriangle,
-  BookOpen,
   MoreHorizontal,
   ChevronDown
 } from 'lucide-react';
