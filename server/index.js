@@ -20,6 +20,7 @@ const wellnessImportRoutes = require('./routes/wellness_import');
 const chatRoutes = require('./routes/chat');
 const genomeRoutes = require('./routes/genome');
 const triggersRoutes = require('./routes/triggers');
+const beliefsRoutes = require('./routes/beliefs');
 const { initDatabase } = require('./database/init');
 // Prisma client (Postgres)
 let prisma = null;
@@ -104,6 +105,7 @@ app.use('/api/wellness-import', wellnessImportRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/genome', genomeRoutes);
 app.use('/api/triggers', triggersRoutes);
+app.use('/api/beliefs', beliefsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

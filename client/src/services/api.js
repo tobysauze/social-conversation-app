@@ -160,12 +160,21 @@ export const triggersAPI = {
   remove: (id) => api.delete(`/triggers/${id}`)
 };
 
+// Beliefs API
+export const beliefsAPI = {
+  list: () => api.get('/beliefs'),
+  create: (data) => api.post('/beliefs', data),
+  update: (id, data) => api.patch(`/beliefs/${id}`, data),
+  remove: (id) => api.delete(`/beliefs/${id}`)
+};
+
 // AI Chat API
 export const chatAPI = {
   listConversations: () => api.get('/chat/conversations'),
   getMessages: (conversationId) => api.get(`/chat/conversations/${conversationId}/messages`),
   sendMessage: ({ conversationId, message, useMemory = true, model }) =>
     api.post('/chat/message', { conversationId, message, useMemory, model }),
+  renameConversation: (conversationId, title) => api.patch(`/chat/conversations/${conversationId}`, { title }),
   deleteConversation: (conversationId) => api.delete(`/chat/conversations/${conversationId}`),
   version: () => api.get('/chat/_version'),
   models: (q) => api.get('/chat/models', { params: q ? { q } : undefined })

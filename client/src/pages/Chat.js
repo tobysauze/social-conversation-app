@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Bot, Plus, Trash2, Send, RefreshCw, Search } from 'lucide-react';
+import { Bot, Plus, Trash2, Send, RefreshCw, Search, Pencil, Check } from 'lucide-react';
 import { chatAPI } from '../services/api';
 
 const MODEL_STORAGE_KEY = 'llm_model';
@@ -39,6 +39,8 @@ const Chat = () => {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [showModelBrowser, setShowModelBrowser] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const endRef = useRef(null);
 
@@ -174,6 +176,33 @@ const Chat = () => {
     } catch (e) {
       console.error(e);
       toast.error(e.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const startRename = (c) => {
+    setRenamingId(c.id);
+    setRenameValue((c.title || '').toString());
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameValue('');
+  };
+
+  const saveRename = async (conversationId) => {
+    const t = renameValue.trim();
+    if (!t) return toast.error('Please enter a name');
+    try {
+      const res = await chatAPI.renameConversation(conversationId, t);
+      const updated = res.data.conversation;
+      setConversations((prev) =>
+        prev.map((c) => (Number(c.id) === Number(conversationId) ? { ...c, ...updated } : c))
+      );
+      toast.success('Renamed');
+      cancelRename();
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.error || 'Failed to rename');
     }
   };
 
@@ -328,20 +357,68 @@ const Chat = () => {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-gray-900 truncate">{c.title || 'Untitled'}</div>
+                        {Number(renamingId) === Number(c.id) ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              className="input-field bg-white text-black h-8 py-1"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  saveRename(c.id);
+                                }
+                                if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  cancelRename();
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+                              title="Save"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                saveRename(c.id);
+                              }}
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-sm font-medium text-gray-900 truncate">{c.title || 'Untitled'}</div>
+                        )}
                         <div className="text-xs text-gray-600 truncate">{c.summary || '—'}</div>
                       </div>
-                      <button
-                        type="button"
-                        className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteConversation(c.id);
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {Number(renamingId) !== Number(c.id) && (
+                          <button
+                            type="button"
+                            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                            title="Rename"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startRename(c);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteConversation(c.id);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </button>
                 ))

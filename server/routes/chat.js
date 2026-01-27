@@ -249,6 +249,38 @@ router.get('/conversations/:id/messages', authenticateToken, (req, res) => {
   }
 });
 
+// Rename a conversation
+router.patch('/conversations/:id', authenticateToken, (req, res) => {
+  try {
+    const conversationId = Number(req.params.id);
+    const title = (req.body?.title || '').toString().trim();
+    if (!title) return res.status(400).json({ error: 'title is required' });
+
+    const db = getDatabase();
+    const uid = req.user.userId;
+    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
+
+    const existing = db
+      .prepare(`SELECT id FROM ai_conversations WHERE id = ? AND user_id = ?`)
+      .get(conversationId, uid);
+    if (!existing) return res.status(404).json({ error: 'Conversation not found' });
+
+    db.prepare(
+      `UPDATE ai_conversations
+       SET title = ?, updated_at = ${nowSql()}
+       WHERE id = ? AND user_id = ?`
+    ).run(title, conversationId, uid);
+
+    const row = db
+      .prepare(`SELECT id, title, summary, created_at, updated_at FROM ai_conversations WHERE id = ? AND user_id = ?`)
+      .get(conversationId, uid);
+    return res.json({ conversation: row });
+  } catch (e) {
+    console.error('Rename conversation error:', e);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Send a message (creates a conversation if needed)
 router.post('/message', authenticateToken, async (req, res) => {
   const { conversationId, message, useMemory = true } = req.body || {};

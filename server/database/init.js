@@ -304,6 +304,24 @@ const initDatabase = () => {
       ON anxiety_triggers(user_id, updated_at)
     `);
 
+    // Beliefs (current → desired + how to change)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS beliefs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        current_belief TEXT NOT NULL,
+        desired_belief TEXT NOT NULL,
+        change_plan TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_beliefs_user_updated
+      ON beliefs(user_id, updated_at)
+    `);
+
     console.log('✅ Database tables created successfully');
     return Promise.resolve();
   } catch (error) {
