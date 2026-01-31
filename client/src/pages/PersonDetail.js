@@ -55,21 +55,41 @@ const PersonDetail = () => {
     }
     if (typeof value === 'string') {
       let parsed = value.trim();
-      for (let i = 0; i < 2; i += 1) {
+      for (let i = 0; i < 3; i += 1) {
         if (typeof parsed === 'string' && (parsed.startsWith('[') || parsed.startsWith('"['))) {
           try {
             parsed = JSON.parse(parsed);
+            continue;
           } catch (_) {
-            break;
+            const unescaped = parsed.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+            if (unescaped !== parsed) {
+              parsed = unescaped;
+              continue;
+            }
           }
         }
+        break;
       }
       if (Array.isArray(parsed)) return parsed;
-      // Fallback: split by comma if it looks like a comma-separated list
-      if (typeof parsed === 'string' && parsed.includes(',')) {
-        return parsed.split(',').map(v => v.trim()).filter(Boolean);
+      if (typeof parsed === 'string') {
+        const asString = parsed.trim();
+        if (asString.startsWith('[') && asString.endsWith(']')) {
+          const inner = asString.slice(1, -1).trim();
+          if (inner) {
+            return inner
+              .split(',')
+              .map((v) => v.trim().replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, ''))
+              .filter(Boolean);
+          }
+        }
+        if (asString.includes(',')) {
+          return asString
+            .split(',')
+            .map((v) => v.trim().replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, ''))
+            .filter(Boolean);
+        }
+        return asString ? [asString.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '')] : [];
       }
-      return parsed ? [parsed] : [];
     }
     return [];
   };
