@@ -78,17 +78,34 @@ router.post('/', authenticateToken, async (req, res) => {
   await ensureTables();
   const { vision = '', values = [], principles = [], traits = [], vision_points = [] } = req.body;
   try {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO identity_visions (user_id, vision, "values", principles, traits, vision_points) VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, "values"=EXCLUDED."values", principles=EXCLUDED.principles, traits=EXCLUDED.traits, vision_points=EXCLUDED.vision_points, updated_at=NOW()`,
-      req.user.userId,
-      vision,
-      JSON.stringify(values),
-      JSON.stringify(principles),
-      JSON.stringify(traits),
-      JSON.stringify(vision_points)
-    );
-    res.json({ message: 'Saved' });
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO identity_visions (user_id, vision, "values", principles, traits, vision_points) VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, "values"=EXCLUDED."values", principles=EXCLUDED.principles, traits=EXCLUDED.traits, vision_points=EXCLUDED.vision_points, updated_at=NOW()`,
+        req.user.userId,
+        vision,
+        JSON.stringify(values),
+        JSON.stringify(principles),
+        JSON.stringify(traits),
+        JSON.stringify(vision_points)
+      );
+      return res.json({ message: 'Saved' });
+    } catch (e) {
+      // Backward compatibility if traits column doesn't exist on Postgres
+      if (String(e?.message || '').toLowerCase().includes('traits')) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO identity_visions (user_id, vision, "values", principles, vision_points) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (user_id) DO UPDATE SET vision=EXCLUDED.vision, "values"=EXCLUDED."values", principles=EXCLUDED.principles, vision_points=EXCLUDED.vision_points, updated_at=NOW()`,
+          req.user.userId,
+          vision,
+          JSON.stringify(values),
+          JSON.stringify(principles),
+          JSON.stringify(vision_points)
+        );
+        return res.json({ message: 'Saved' });
+      }
+      throw e;
+    }
   } catch (e) {
     console.error('Identity POST (Postgres) error:', e);
     // Fallback to SQLite
