@@ -199,6 +199,7 @@ const Journal = () => {
     excited: '🤩',
     anxious: '😰',
     calm: '😌',
+    annoyed: '😒',
     frustrated: '😤',
     grateful: '🙏',
     confused: '😕',

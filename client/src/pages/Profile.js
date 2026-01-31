@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Edit, Save, X, Camera, Settings, Bell, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { authAPI } from '../services/api';
 
 const Profile = () => {
   const [user, setUser] = useState({
@@ -13,6 +14,12 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
   const [loading, setLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   useEffect(() => {
     setEditData(user);
@@ -41,6 +48,29 @@ const Profile = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditData(user);
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+      toast.error('Please fill out your current and new password.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('New passwords do not match.');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await authAPI.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Password updated successfully!');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update password');
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const addInterest = (interest) => {
@@ -255,6 +285,56 @@ const Profile = () => {
                   </label>
                 </div>
               </div>
+            </div>
+
+            {/* Security */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Security</h3>
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                  <input
+                    type="password"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                    }
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                  <input
+                    type="password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                    }
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter new password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                    }
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Re-enter new password"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {passwordLoading ? 'Updating...' : 'Update Password'}
+                </button>
+              </form>
             </div>
           </div>
         </div>

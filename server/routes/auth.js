@@ -132,6 +132,68 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Change password
+router.post('/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    let user = null;
+    let usedSQLiteFallback = false;
+
+    try {
+      user = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { id: true, password: true }
+      });
+    } catch (e) {
+      usedSQLiteFallback = true;
+    }
+
+    if (usedSQLiteFallback) {
+      const db = getDatabase();
+      const row = db
+        .prepare('SELECT id, password_hash FROM users WHERE id = ?')
+        .get(req.user.userId);
+
+      if (!row) return res.status(404).json({ error: 'User not found' });
+
+      const isValid = await bcrypt.compare(currentPassword, row.password_hash);
+      if (!isValid) return res.status(400).json({ error: 'Current password is incorrect' });
+
+      const newHash = await bcrypt.hash(newPassword, 12);
+      db
+        .prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(newHash, req.user.userId);
+
+      return res.json({ message: 'Password updated successfully' });
+    }
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) return res.status(400).json({ error: 'Current password is incorrect' });
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { password: newHash }
+    });
+
+    return res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get current user
 router.get('/me', authenticateToken, async (req, res) => {
   try {

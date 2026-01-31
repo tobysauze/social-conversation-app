@@ -38,15 +38,38 @@ const PersonDetail = () => {
   const [addingJoke, setAddingJoke] = useState(false);
 
   const coerceToArray = (value) => {
-    if (Array.isArray(value)) return value;
+    if (Array.isArray(value)) {
+      if (
+        value.length > 1 &&
+        value.every((item) => typeof item === 'string' && item.length === 1)
+      ) {
+        return coerceToArray(value.join(''));
+      }
+      if (value.length === 1 && typeof value[0] === 'string') {
+        const inner = value[0].trim();
+        if (inner.startsWith('[') || inner.startsWith('"[')) {
+          return coerceToArray(inner);
+        }
+      }
+      return value;
+    }
     if (typeof value === 'string') {
-      try {
-        const parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (_) {}
+      let parsed = value.trim();
+      for (let i = 0; i < 2; i += 1) {
+        if (typeof parsed === 'string' && (parsed.startsWith('[') || parsed.startsWith('"['))) {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch (_) {
+            break;
+          }
+        }
+      }
+      if (Array.isArray(parsed)) return parsed;
       // Fallback: split by comma if it looks like a comma-separated list
-      if (value.includes(',')) return value.split(',').map(v => v.trim()).filter(Boolean);
-      return value ? [value] : [];
+      if (typeof parsed === 'string' && parsed.includes(',')) {
+        return parsed.split(',').map(v => v.trim()).filter(Boolean);
+      }
+      return parsed ? [parsed] : [];
     }
     return [];
   };

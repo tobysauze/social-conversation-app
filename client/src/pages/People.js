@@ -44,6 +44,47 @@ const People = () => {
   const [newExperience, setNewExperience] = useState('');
   const [newPreference, setNewPreference] = useState('');
 
+  const coerceToArray = (value) => {
+    if (Array.isArray(value)) {
+      if (
+        value.length > 1 &&
+        value.every((item) => typeof item === 'string' && item.length === 1)
+      ) {
+        return coerceToArray(value.join(''));
+      }
+      if (value.length === 1 && typeof value[0] === 'string') {
+        const inner = value[0].trim();
+        if (inner.startsWith('[') || inner.startsWith('"[')) {
+          return coerceToArray(inner);
+        }
+      }
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      let parsed = value.trim();
+      for (let i = 0; i < 2; i += 1) {
+        if (typeof parsed === 'string' && (parsed.startsWith('[') || parsed.startsWith('"['))) {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch (_) {
+            break;
+          }
+        }
+      }
+
+      if (Array.isArray(parsed)) return parsed;
+      if (typeof parsed === 'string') {
+        if (parsed.includes(',')) {
+          return parsed.split(',').map((v) => v.trim()).filter(Boolean);
+        }
+        return parsed ? [parsed] : [];
+      }
+    }
+
+    return [];
+  };
+
   useEffect(() => {
     loadPeople();
   }, []);
@@ -53,18 +94,10 @@ const People = () => {
       const response = await peopleAPI.getPeople();
       const peopleData = (response.data.people || []).map(p => ({
         ...p,
-        interests: Array.isArray(p.interests)
-          ? p.interests
-          : (typeof p.interests === 'string' ? (() => { try { return JSON.parse(p.interests); } catch { return []; } })() : []),
-        personality_traits: Array.isArray(p.personality_traits)
-          ? p.personality_traits
-          : (typeof p.personality_traits === 'string' ? (() => { try { return JSON.parse(p.personality_traits); } catch { return []; } })() : []),
-        shared_experiences: Array.isArray(p.shared_experiences)
-          ? p.shared_experiences
-          : (typeof p.shared_experiences === 'string' ? (() => { try { return JSON.parse(p.shared_experiences); } catch { return []; } })() : []),
-        story_preferences: Array.isArray(p.story_preferences)
-          ? p.story_preferences
-          : (typeof p.story_preferences === 'string' ? (() => { try { return JSON.parse(p.story_preferences); } catch { return []; } })() : [])
+        interests: coerceToArray(p.interests),
+        personality_traits: coerceToArray(p.personality_traits),
+        shared_experiences: coerceToArray(p.shared_experiences),
+        story_preferences: coerceToArray(p.story_preferences)
       }));
       setPeople(peopleData);
     } catch (error) {
