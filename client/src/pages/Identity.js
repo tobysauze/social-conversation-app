@@ -11,16 +11,18 @@ const Identity = () => {
   const [newVisionPoint, setNewVisionPoint] = useState('');
   const [values, setValues] = useState([]);
   const [principles, setPrinciples] = useState([]);
-  const [tmp, setTmp] = useState({ value: '', principle: '' });
+  const [traits, setTraits] = useState([]);
+  const [tmp, setTmp] = useState({ value: '', principle: '', trait: '' });
 
   useEffect(() => {
     (async () => {
       try {
         const res = await identityAPI.get();
-        const d = res.data.identity || { vision: '', values: [], principles: [], vision_points: [] };
+        const d = res.data.identity || { vision: '', values: [], principles: [], traits: [], vision_points: [] };
         setVision(d.vision || '');
         setValues(d.values || []);
         setPrinciples(d.principles || []);
+        setTraits(d.traits || []);
         setVisionPoints(d.vision_points || []);
       } catch (e) {
         console.error(e);
@@ -33,7 +35,7 @@ const Identity = () => {
   const save = async () => {
     setSaving(true);
     try {
-      await identityAPI.save({ vision, values, principles, vision_points: visionPoints });
+      await identityAPI.save({ vision, values, principles, traits, vision_points: visionPoints });
       toast.success('Saved');
     } catch (e) {
       console.error(e);
@@ -103,6 +105,19 @@ const Identity = () => {
           </div>
           <div className="flex flex-wrap gap-2">
             {principles.map((p,i)=>(<span key={i} className="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full flex items-center">{p}<button onClick={()=>setPrinciples(pr=>pr.filter((_,idx)=>idx!==i))} className="ml-2">×</button></span>))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6">
+        <div className="card">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Personality traits</label>
+          <div className="flex gap-2 mb-2">
+            <input value={tmp.trait} onChange={(e)=>setTmp(prev=>({ ...prev, trait: e.target.value }))} className="input-field flex-1" placeholder="e.g., Curious, Direct, Playful"/>
+            <button className="btn-primary" onClick={()=>{ if(tmp.trait.trim()){ setTraits(t=>[...t, tmp.trait.trim()]); setTmp(prev=>({ ...prev, trait: '' })); } }}>Add</button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {traits.map((t,i)=>(<span key={i} className="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full flex items-center">{t}<button onClick={()=>setTraits(list=>list.filter((_,idx)=>idx!==i))} className="ml-2">×</button></span>))}
           </div>
         </div>
       </div>

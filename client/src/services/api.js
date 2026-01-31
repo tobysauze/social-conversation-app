@@ -58,6 +58,7 @@ export const journalAPI = {
   updateEntry: (id, data) => api.put(`/journal/${id}`, data),
   deleteEntry: (id) => api.delete(`/journal/${id}`),
   getEntriesByDateRange: (start, end) => api.get(`/journal/date-range/${start}/${end}`),
+  analyzeInsights: (id) => api.post(`/journal/${id}/analyze-insights`),
 };
 
 // Stories API

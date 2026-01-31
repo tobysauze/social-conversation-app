@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
+const { analyzeJournalForPersonalInsights } = require('../services/openai');
 
 const router = express.Router();
 
@@ -145,6 +146,23 @@ router.get('/date-range/:start/:end', authenticateToken, async (req, res) => {
     res.json({ entries: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Analyze a journal entry for goals, beliefs, triggers, and identity
+router.post('/:id/analyze-insights', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const entry = await prisma.journalEntry.findFirst({
+      where: { id: Number(id), userId: req.user.userId }
+    });
+    if (!entry) return res.status(404).json({ error: 'Journal entry not found' });
+
+    const insights = await analyzeJournalForPersonalInsights(entry.content);
+    res.json({ insights });
+  } catch (e) {
+    console.error('Analyze journal insights error:', e);
+    res.status(500).json({ error: 'Failed to analyze journal entry' });
   }
 });
 

@@ -10,12 +10,14 @@ import {
   BookOpen,
   MessageSquare,
   ArrowRight,
-  Brain
+  Brain,
+  Lightbulb
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import ExtractedStoriesModal from '../components/ExtractedStoriesModal';
 import ProfileSuggestionsModal from '../components/ProfileSuggestionsModal';
+import JournalInsightsModal from '../components/JournalInsightsModal';
 
 const Journal = () => {
   const [entries, setEntries] = useState([]);
@@ -35,6 +37,14 @@ const Journal = () => {
   const [showProfileSuggestions, setShowProfileSuggestions] = useState(false);
   const [profileSuggestions, setProfileSuggestions] = useState([]);
   const [analyzingProfile, setAnalyzingProfile] = useState(false);
+  const [analyzingInsights, setAnalyzingInsights] = useState(null);
+  const [showJournalInsights, setShowJournalInsights] = useState(false);
+  const [journalInsights, setJournalInsights] = useState({
+    goals: [],
+    beliefs: [],
+    triggers: [],
+    identity: { values: [], principles: [], traits: [], vision_points: [] }
+  });
 
   useEffect(() => {
     loadEntries();
@@ -191,6 +201,41 @@ const Journal = () => {
     setProfileSuggestions([]);
     // Optionally reload people data or show success message
     toast.success('Profile insights applied successfully!');
+  };
+
+  const handleAnalyzeInsights = async (entryId) => {
+    setAnalyzingInsights(entryId);
+    try {
+      const response = await journalAPI.analyzeInsights(entryId);
+      const insights = response.data.insights || {
+        goals: [],
+        beliefs: [],
+        triggers: [],
+        identity: { values: [], principles: [], traits: [], vision_points: [] }
+      };
+
+      const hasAny =
+        (insights.goals || []).length ||
+        (insights.beliefs || []).length ||
+        (insights.triggers || []).length ||
+        ((insights.identity?.values || []).length ||
+          (insights.identity?.principles || []).length ||
+          (insights.identity?.traits || []).length ||
+          (insights.identity?.vision_points || []).length);
+
+      if (!hasAny) {
+        toast('No goals, beliefs, triggers, or identity insights found', { icon: 'ℹ️' });
+        return;
+      }
+
+      setJournalInsights(insights);
+      setShowJournalInsights(true);
+    } catch (error) {
+      console.error('Error analyzing journal insights:', error);
+      toast.error(error.response?.data?.error || 'Failed to analyze entry');
+    } finally {
+      setAnalyzingInsights(null);
+    }
   };
 
   const moodEmojis = {
@@ -378,6 +423,18 @@ const Journal = () => {
                     )}
                   </button>
                   <button
+                    onClick={() => handleAnalyzeInsights(entry.id)}
+                    disabled={analyzingInsights === entry.id}
+                    className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors duration-200"
+                    title="Analyze for goals, beliefs, triggers, identity"
+                  >
+                    {analyzingInsights === entry.id ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600"></div>
+                    ) : (
+                      <Lightbulb className="w-4 h-4" />
+                    )}
+                  </button>
+                  <button
                     onClick={() => handleEdit(entry)}
                     className="p-2 text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
                     title="Edit entry"
@@ -478,6 +535,13 @@ const Journal = () => {
         onClose={() => setShowProfileSuggestions(false)}
         suggestions={profileSuggestions}
         onApplyInsights={handleProfileInsightsApplied}
+      />
+
+      <JournalInsightsModal
+        isOpen={showJournalInsights}
+        onClose={() => setShowJournalInsights(false)}
+        insights={journalInsights}
+        onApplied={() => toast.success('Insights applied')}
       />
     </div>
   );

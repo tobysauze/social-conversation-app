@@ -20,6 +20,22 @@ const openai = new OpenAI({
   ...(defaultHeaders ? { defaultHeaders } : {})
 });
 
+function safeParseJson(content, fallback) {
+  if (!content) return fallback;
+  let cleaned = content.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (parseError) {
+    console.error('JSON Parse Error:', parseError);
+    console.error('Raw content:', content);
+    console.error('Cleaned content:', cleaned);
+    return fallback;
+  }
+}
+
 function getModel(override) {
   const m = (override || '').toString().trim();
   return m || DEFAULT_MODEL;
@@ -348,32 +364,79 @@ Only include people who are clearly mentioned or described. Be conservative - on
     });
 
     const content = response.choices[0].message.content;
-    
-    // Clean up the response to ensure valid JSON
-    let cleanedContent = content.trim();
-    
-    // Remove any markdown code blocks if present
-    if (cleanedContent.startsWith('```json')) {
-      cleanedContent = cleanedContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanedContent.startsWith('```')) {
-      cleanedContent = cleanedContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-    
-    try {
-      return JSON.parse(cleanedContent);
-    } catch (parseError) {
-      console.error('JSON Parse Error in analyzeJournalForPeopleInsights:', parseError);
-      console.error('Raw content:', content);
-      console.error('Cleaned content:', cleanedContent);
-      
-      // Return a safe fallback
-      return {
-        people_insights: []
-      };
-    }
+    return safeParseJson(content, { people_insights: [] });
   } catch (error) {
     console.error('Error analyzing journal for people insights:', error);
     throw new Error('Failed to analyze journal for people insights');
+  }
+};
+
+const analyzeJournalForPersonalInsights = async (journalContent) => {
+  try {
+    const prompt = `You are a helpful assistant that extracts personal insights from a journal entry.
+
+Return STRICT JSON with this schema:
+{
+  "goals": [
+    {
+      "title": string,
+      "description": string,
+      "area": string,
+      "target_date": string
+    }
+  ],
+  "beliefs": [
+    {
+      "current_belief": string,
+      "desired_belief": string,
+      "change_plan": string
+    }
+  ],
+  "triggers": [
+    {
+      "title": string,
+      "category": string,
+      "intensity": number,
+      "notes": string
+    }
+  ],
+  "identity": {
+    "values": string[],
+    "principles": string[],
+    "vision_points": string[],
+    "traits": string[]
+  }
+}
+
+Guidelines:
+- Only include items you are confident about.
+- Keep text concise and specific.
+- "target_date" should be YYYY-MM-DD when mentioned, otherwise empty string.
+- "intensity" should be 1-10 when mentioned, otherwise null.
+- Return empty arrays when nothing is found.
+
+Journal entry:
+"""
+${journalContent}
+"""`;
+
+    const response = await openai.chat.completions.create({
+      model: getModel(),
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 1200
+    });
+
+    const content = response.choices[0].message.content;
+    return safeParseJson(content, {
+      goals: [],
+      beliefs: [],
+      triggers: [],
+      identity: { values: [], principles: [], vision_points: [], traits: [] }
+    });
+  } catch (error) {
+    console.error('Error analyzing journal for personal insights:', error);
+    return { goals: [], beliefs: [], triggers: [], identity: { values: [], principles: [], vision_points: [], traits: [] } };
   }
 };
 
@@ -712,6 +775,7 @@ module.exports = {
   practiceFeedback,
   getStoryRecommendations,
   analyzeJournalForPeopleInsights,
+  analyzeJournalForPersonalInsights,
   generateJoke,
   iterateJoke,
   categorizeJoke,
