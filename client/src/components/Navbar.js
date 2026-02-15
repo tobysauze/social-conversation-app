@@ -19,7 +19,8 @@ import {
   Bot,
   AlertTriangle,
   MoreHorizontal,
-  ChevronDown
+  ChevronDown,
+  ClipboardList
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -43,7 +44,8 @@ const Navbar = () => {
     { name: 'Genome', href: '/genome', icon: Dna },
     { name: 'AI Chat', href: '/chat', icon: Bot },
     { name: 'Triggers', href: '/triggers', icon: AlertTriangle },
-    { name: 'Beliefs', href: '/beliefs', icon: BookOpen }
+    { name: 'Beliefs', href: '/beliefs', icon: BookOpen },
+    { name: 'Protocols', href: '/protocols', icon: ClipboardList }
   ];
 
   const primaryNav = useMemo(() => {

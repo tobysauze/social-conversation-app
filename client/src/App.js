@@ -21,6 +21,7 @@ import Genome from './pages/Genome';
 import Chat from './pages/Chat';
 import Triggers from './pages/Triggers';
 import Beliefs from './pages/Beliefs';
+import Protocols from './pages/Protocols';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -199,6 +200,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Beliefs />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/protocols"
+            element={
+              <ProtectedRoute>
+                <Protocols />
               </ProtectedRoute>
             }
           />
