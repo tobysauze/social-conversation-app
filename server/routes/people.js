@@ -107,11 +107,11 @@ router.post('/', authenticateToken, async (req, res) => {
         name,
         relationship: relationship || null,
         howMet: how_met || null,
-        interests: JSON.stringify(interests || []),
-        personalityTraits: JSON.stringify(personality_traits || []),
+        interests: JSON.stringify(parseJsonArrayOrWrap(interests)),
+        personalityTraits: JSON.stringify(parseJsonArrayOrWrap(personality_traits)),
         conversationStyle: conversation_style || null,
-        sharedExperiences: JSON.stringify(shared_experiences || []),
-        storyPreferences: JSON.stringify(story_preferences || []),
+        sharedExperiences: JSON.stringify(parseJsonArrayOrWrap(shared_experiences)),
+        storyPreferences: JSON.stringify(parseJsonArrayOrWrap(story_preferences)),
         notes: notes || null
       }
     });
@@ -121,11 +121,11 @@ router.post('/', authenticateToken, async (req, res) => {
       name: person.name,
       relationship: person.relationship,
       how_met: person.howMet,
-      interests: person.interests ? JSON.parse(person.interests) : [],
-      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
+      interests: parseJsonArrayOrWrap(person.interests),
+      personality_traits: parseJsonArrayOrWrap(person.personalityTraits),
       conversation_style: person.conversationStyle,
-      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
-      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
+      shared_experiences: parseJsonArrayOrWrap(person.sharedExperiences),
+      story_preferences: parseJsonArrayOrWrap(person.storyPreferences),
       notes: person.notes,
       created_at: person.createdAt,
       updated_at: person.updatedAt
@@ -162,11 +162,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
         name,
         relationship: relationship || null,
         howMet: how_met || null,
-        interests: JSON.stringify(interests || []),
-        personalityTraits: JSON.stringify(personality_traits || []),
+        interests: JSON.stringify(parseJsonArrayOrWrap(interests)),
+        personalityTraits: JSON.stringify(parseJsonArrayOrWrap(personality_traits)),
         conversationStyle: conversation_style || null,
-        sharedExperiences: JSON.stringify(shared_experiences || []),
-        storyPreferences: JSON.stringify(story_preferences || []),
+        sharedExperiences: JSON.stringify(parseJsonArrayOrWrap(shared_experiences)),
+        storyPreferences: JSON.stringify(parseJsonArrayOrWrap(story_preferences)),
         notes: notes || null
       }
     });
@@ -176,11 +176,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
       name: person.name,
       relationship: person.relationship,
       how_met: person.howMet,
-      interests: person.interests ? JSON.parse(person.interests) : [],
-      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
+      interests: parseJsonArrayOrWrap(person.interests),
+      personality_traits: parseJsonArrayOrWrap(person.personalityTraits),
       conversation_style: person.conversationStyle,
-      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
-      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
+      shared_experiences: parseJsonArrayOrWrap(person.sharedExperiences),
+      story_preferences: parseJsonArrayOrWrap(person.storyPreferences),
       notes: person.notes,
       created_at: person.createdAt,
       updated_at: person.updatedAt
@@ -219,10 +219,10 @@ router.get('/:id/story-recommendations', authenticateToken, async (req, res) => 
     const parsedPerson = {
       id: person.id,
       name: person.name,
-      interests: person.interests ? JSON.parse(person.interests) : [],
-      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
-      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
-      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : []
+      interests: parseJsonArrayOrWrap(person.interests),
+      personality_traits: parseJsonArrayOrWrap(person.personalityTraits),
+      shared_experiences: parseJsonArrayOrWrap(person.sharedExperiences),
+      story_preferences: parseJsonArrayOrWrap(person.storyPreferences)
     };
 
     const recommendations = await getStoryRecommendations(parsedPerson, stories);
@@ -269,10 +269,10 @@ router.post('/analyze-journal', authenticateToken, async (req, res) => {
     const parsedPeople = existingPeople.map(person => ({
       id: person.id,
       name: person.name,
-      interests: person.interests ? JSON.parse(person.interests) : [],
-      personality_traits: person.personalityTraits ? JSON.parse(person.personalityTraits) : [],
-      shared_experiences: person.sharedExperiences ? JSON.parse(person.sharedExperiences) : [],
-      story_preferences: person.storyPreferences ? JSON.parse(person.storyPreferences) : [],
+      interests: parseJsonArrayOrWrap(person.interests),
+      personality_traits: parseJsonArrayOrWrap(person.personalityTraits),
+      shared_experiences: parseJsonArrayOrWrap(person.sharedExperiences),
+      story_preferences: parseJsonArrayOrWrap(person.storyPreferences),
       conversation_style: person.conversationStyle || null,
       relationship: person.relationship || null
     }));
@@ -300,9 +300,9 @@ router.post('/:id/apply-insights', authenticateToken, async (req, res) => {
     });
     if (!person) return res.status(404).json({ error: 'Person not found' });
 
-    const currentInterests = person.interests ? JSON.parse(person.interests) : [];
-    const currentTraits = person.personalityTraits ? JSON.parse(person.personalityTraits) : [];
-    const currentPreferences = person.storyPreferences ? JSON.parse(person.storyPreferences) : [];
+    const currentInterests = parseJsonArrayOrWrap(person.interests);
+    const currentTraits = parseJsonArrayOrWrap(person.personalityTraits);
+    const currentPreferences = parseJsonArrayOrWrap(person.storyPreferences);
 
     const updatedInterests = Array.from(new Set([...currentInterests, ...(insights.interests || [])]));
     const updatedTraits = Array.from(new Set([...currentTraits, ...(insights.personality_traits || [])]));

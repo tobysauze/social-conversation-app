@@ -391,10 +391,10 @@ const PersonDetail = () => {
     try {
       const updateData = {
         ...editForm,
-        interests: JSON.stringify(editForm.interests || []),
-        personality_traits: JSON.stringify(editForm.personality_traits || []),
-        shared_experiences: JSON.stringify(editForm.shared_experiences || []),
-        story_preferences: JSON.stringify(editForm.story_preferences || [])
+        interests: editForm.interests || [],
+        personality_traits: editForm.personality_traits || [],
+        shared_experiences: editForm.shared_experiences || [],
+        story_preferences: editForm.story_preferences || []
       };
 
       await peopleAPI.updatePerson(id, updateData);
