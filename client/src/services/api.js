@@ -168,6 +168,13 @@ export const datingAPI = {
   save: (data) => api.post('/dating', data)
 };
 
+export const protocolsAPI = {
+  list: () => api.get('/protocols'),
+  create: (data) => api.post('/protocols', data),
+  update: (id, data) => api.patch(`/protocols/${id}`, data),
+  remove: (id) => api.delete(`/protocols/${id}`)
+};
+
 // Triggers API
 export const triggersAPI = {
   list: () => api.get('/triggers'),
