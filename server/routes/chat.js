@@ -258,7 +258,7 @@ async function getAssistantReply({ model, memorySummaries, messages, personConte
     ? `\n\nSaved chat memory (summaries of the user's prior chats):\n${memorySummaries.map((s, i) => `(${i + 1}) ${s}`).join('\n')}\n`
     : '';
   const personBlock = personContext
-    ? `\n\nPerson context for this conversation:\n${personContext}\nUse this context to tailor advice/messages specifically for this person.`
+    ? `\n\nPerson context for this conversation (IMPORTANT):\n${personContext}\n\nRole clarity:\n- The user chatting with you is the account owner seeking better connection with this person.\n- The profile above describes someone else, not the user.\n- Do NOT address the user as if they are this person.\n- Give guidance from the user's perspective: how to understand this person, communicate with them, and build a better relationship.\n- When useful, suggest concrete next messages/questions/actions the user can try with this person.`
     : '';
 
   const system = `You are a helpful, friendly AI chat assistant. Be conversational, ask clarifying questions when needed, and keep responses grounded and practical.${memoryBlock}${personBlock}

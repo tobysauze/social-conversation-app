@@ -56,6 +56,9 @@ const PersonDetail = () => {
   const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [loadingPins, setLoadingPins] = useState(false);
+  const [newInterest, setNewInterest] = useState('');
+  const [newTrait, setNewTrait] = useState('');
+  const [newPreference, setNewPreference] = useState('');
   const [llmProvider, setLlmProvider] = useState(null);
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem(MODEL_STORAGE_KEY) || 'openai/gpt-4o-mini'
@@ -465,10 +468,13 @@ const PersonDetail = () => {
   };
 
   const addArrayItem = (field, value) => {
-    if (value.trim()) {
+    const trimmed = (value || '').trim();
+    if (trimmed) {
+      const existing = (editForm[field] || []).map((v) => String(v).toLowerCase());
+      if (existing.includes(trimmed.toLowerCase())) return;
       setEditForm(prev => ({
         ...prev,
-        [field]: [...(prev[field] || []), value.trim()]
+        [field]: [...(prev[field] || []), trimmed]
       }));
     }
   };
@@ -671,19 +677,20 @@ const PersonDetail = () => {
                     <input
                       type="text"
                       placeholder="Add interest"
+                      value={newInterest}
+                      onChange={(e) => setNewInterest(e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      onKeyPress={(e) => {
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          addArrayItem('interests', e.target.value);
-                          e.target.value = '';
+                          addArrayItem('interests', newInterest);
+                          setNewInterest('');
                         }
                       }}
                     />
                     <button
-                      onClick={(e) => {
-                        const input = e.target.previousElementSibling;
-                        addArrayItem('interests', input.value);
-                        input.value = '';
+                      onClick={() => {
+                        addArrayItem('interests', newInterest);
+                        setNewInterest('');
                       }}
                       className="px-4 py-2 bg-primary-600 text-white rounded-r-lg hover:bg-primary-700"
                     >
@@ -737,19 +744,20 @@ const PersonDetail = () => {
                     <input
                       type="text"
                       placeholder="Add trait"
+                      value={newTrait}
+                      onChange={(e) => setNewTrait(e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      onKeyPress={(e) => {
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          addArrayItem('personality_traits', e.target.value);
-                          e.target.value = '';
+                          addArrayItem('personality_traits', newTrait);
+                          setNewTrait('');
                         }
                       }}
                     />
                     <button
-                      onClick={(e) => {
-                        const input = e.target.previousElementSibling;
-                        addArrayItem('personality_traits', input.value);
-                        input.value = '';
+                      onClick={() => {
+                        addArrayItem('personality_traits', newTrait);
+                        setNewTrait('');
                       }}
                       className="px-4 py-2 bg-primary-600 text-white rounded-r-lg hover:bg-primary-700"
                     >
@@ -803,19 +811,20 @@ const PersonDetail = () => {
                     <input
                       type="text"
                       placeholder="Add preference"
+                      value={newPreference}
+                      onChange={(e) => setNewPreference(e.target.value)}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      onKeyPress={(e) => {
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          addArrayItem('story_preferences', e.target.value);
-                          e.target.value = '';
+                          addArrayItem('story_preferences', newPreference);
+                          setNewPreference('');
                         }
                       }}
                     />
                     <button
-                      onClick={(e) => {
-                        const input = e.target.previousElementSibling;
-                        addArrayItem('story_preferences', input.value);
-                        input.value = '';
+                      onClick={() => {
+                        addArrayItem('story_preferences', newPreference);
+                        setNewPreference('');
                       }}
                       className="px-4 py-2 bg-primary-600 text-white rounded-r-lg hover:bg-primary-700"
                     >
