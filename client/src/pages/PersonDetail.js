@@ -17,7 +17,10 @@ import {
   Laugh,
   Bot,
   Send,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Pin,
+  PinOff
 } from 'lucide-react';
 import { peopleAPI, jokesAPI } from '../services/api';
 import { format } from 'date-fns';
@@ -46,6 +49,12 @@ const PersonDetail = () => {
   const [loadingPersonChats, setLoadingPersonChats] = useState(false);
   const [loadingPersonMessages, setLoadingPersonMessages] = useState(false);
   const [sendingPersonMessage, setSendingPersonMessage] = useState(false);
+  const [chatSearch, setChatSearch] = useState('');
+  const [chatDateFilter, setChatDateFilter] = useState('all');
+  const [messageSearch, setMessageSearch] = useState('');
+  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [loadingPins, setLoadingPins] = useState(false);
 
   const coerceToArray = (value) => {
     if (Array.isArray(value)) {
@@ -118,6 +127,31 @@ const PersonDetail = () => {
     return format(d, 'MMM d, yyyy h:mm a');
   };
 
+  const applyDateFilter = (value) => {
+    if (chatDateFilter === 'all') return true;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return false;
+    const now = Date.now();
+    const days = chatDateFilter === '7d' ? 7 : 30;
+    return now - d.getTime() <= days * 24 * 60 * 60 * 1000;
+  };
+
+  const filteredChats = personChats.filter((chat) => {
+    const q = chatSearch.trim().toLowerCase();
+    const textMatch = !q
+      || (chat.title || '').toLowerCase().includes(q)
+      || (chat.summary || '').toLowerCase().includes(q);
+    const dateMatch = applyDateFilter(chat.updated_at || chat.created_at);
+    return textMatch && dateMatch;
+  });
+
+  const filteredMessages = personMessages.filter((m) => {
+    if (showPinnedOnly && !Number(m.is_pinned)) return false;
+    const q = messageSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (m.content || '').toLowerCase().includes(q);
+  });
+
   const handleAddQuickNote = async () => {
     if (!quickNote.trim()) return;
     setSavingQuickNote(true);
@@ -140,6 +174,7 @@ const PersonDetail = () => {
     loadPerson();
     loadJokes();
     loadPersonChats();
+    loadPinnedMessages();
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -207,6 +242,19 @@ const PersonDetail = () => {
     }
   };
 
+  const loadPinnedMessages = async () => {
+    setLoadingPins(true);
+    try {
+      const res = await peopleAPI.listPersonPins(id);
+      setPinnedMessages(res.data.pins || []);
+    } catch (error) {
+      console.error('Error loading pinned messages:', error);
+      toast.error('Failed to load pinned messages');
+    } finally {
+      setLoadingPins(false);
+    }
+  };
+
   const loadPersonMessages = async (conversationId) => {
     if (!conversationId) {
       setPersonMessages([]);
@@ -221,6 +269,18 @@ const PersonDetail = () => {
       toast.error('Failed to load messages');
     } finally {
       setLoadingPersonMessages(false);
+    }
+  };
+
+  const togglePinMessage = async (message) => {
+    try {
+      const pinned = Number(message.is_pinned) ? false : true;
+      await peopleAPI.pinPersonMessage(id, message.id, { pinned });
+      await Promise.all([loadPersonMessages(activeChatId), loadPinnedMessages()]);
+      toast.success(pinned ? 'Message pinned' : 'Message unpinned');
+    } catch (error) {
+      console.error('Error toggling message pin:', error);
+      toast.error('Failed to update pin');
     }
   };
 
@@ -249,7 +309,7 @@ const PersonDetail = () => {
       if (!activeChatId && convId) {
         setActiveChatId(convId);
       }
-      await Promise.all([loadPersonChats(), loadPersonMessages(convId || activeChatId)]);
+      await Promise.all([loadPersonChats(), loadPersonMessages(convId || activeChatId), loadPinnedMessages()]);
     } catch (error) {
       console.error('Error sending person chat message:', error);
       setPersonMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
@@ -274,6 +334,7 @@ const PersonDetail = () => {
         setActiveChatId(null);
         setPersonMessages([]);
       }
+      await loadPinnedMessages();
       toast.success('Chat deleted');
     } catch (error) {
       console.error('Error deleting person chat:', error);
@@ -960,13 +1021,34 @@ const PersonDetail = () => {
                 This chat uses this person&apos;s profile as context and saves history with timestamps.
               </p>
 
+              <div className="grid grid-cols-1 gap-2 mb-3">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  <input
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    placeholder="Search chats by title or summary..."
+                    value={chatSearch}
+                    onChange={(e) => setChatSearch(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  value={chatDateFilter}
+                  onChange={(e) => setChatDateFilter(e.target.value)}
+                >
+                  <option value="all">All dates</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                </select>
+              </div>
+
               <div className="border border-gray-200 rounded-lg mb-3 max-h-32 overflow-auto">
                 {loadingPersonChats ? (
                   <div className="p-3 text-sm text-gray-500">Loading chats...</div>
-                ) : personChats.length === 0 ? (
-                  <div className="p-3 text-sm text-gray-500">No chats yet. Start one below.</div>
+                ) : filteredChats.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-500">No chats match your filters.</div>
                 ) : (
-                  personChats.map((chat) => (
+                  filteredChats.map((chat) => (
                     <div
                       key={chat.id}
                       className={`px-3 py-2 border-b last:border-b-0 cursor-pointer ${
@@ -995,14 +1077,37 @@ const PersonDetail = () => {
               </div>
 
               <div className="border border-gray-200 rounded-lg p-3 h-64 overflow-auto mb-3 space-y-2 bg-gray-50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                    <input
+                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                      placeholder="Search messages..."
+                      value={messageSearch}
+                      onChange={(e) => setMessageSearch(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className={`px-3 py-2 rounded-lg text-xs border ${
+                      showPinnedOnly
+                        ? 'bg-primary-100 text-primary-700 border-primary-300'
+                        : 'bg-white text-gray-700 border-gray-300'
+                    }`}
+                    onClick={() => setShowPinnedOnly((v) => !v)}
+                  >
+                    {showPinnedOnly ? 'Pinned only' : 'All messages'}
+                  </button>
+                </div>
+
                 {loadingPersonMessages ? (
                   <div className="text-sm text-gray-500">Loading messages...</div>
-                ) : personMessages.length === 0 ? (
+                ) : filteredMessages.length === 0 ? (
                   <div className="text-sm text-gray-500">
-                    Ask about how to connect with {person.name}, what stories to tell, or how to approach a conversation.
+                    No messages match your filter.
                   </div>
                 ) : (
-                  personMessages.map((m) => (
+                  filteredMessages.map((m) => (
                     <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className="max-w-[90%]">
                         <div
@@ -1014,8 +1119,16 @@ const PersonDetail = () => {
                         >
                           {m.content}
                         </div>
-                        <div className={`text-[11px] mt-1 ${m.role === 'user' ? 'text-right text-gray-500' : 'text-gray-500'}`}>
-                          {formatDateTime(m.created_at)}
+                        <div className={`text-[11px] mt-1 flex items-center gap-2 ${m.role === 'user' ? 'justify-end text-gray-500' : 'text-gray-500'}`}>
+                          <span>{formatDateTime(m.created_at)}</span>
+                          <button
+                            type="button"
+                            className={`inline-flex items-center ${Number(m.is_pinned) ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            title={Number(m.is_pinned) ? 'Unpin message' : 'Pin important message'}
+                            onClick={() => togglePinMessage(m)}
+                          >
+                            {Number(m.is_pinned) ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1045,6 +1158,34 @@ const PersonDetail = () => {
                   {sendingPersonMessage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+
+            {/* Pinned chat messages */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                <Pin className="w-5 h-5 mr-2 text-primary-600" />
+                Pinned Messages
+              </h3>
+              {loadingPins ? (
+                <div className="text-sm text-gray-500">Loading pinned messages...</div>
+              ) : pinnedMessages.length === 0 ? (
+                <div className="text-sm text-gray-500">No pinned messages yet.</div>
+              ) : (
+                <div className="space-y-3 max-h-56 overflow-auto">
+                  {pinnedMessages.map((pinItem) => (
+                    <button
+                      type="button"
+                      key={pinItem.id}
+                      className="w-full text-left border border-gray-200 rounded-lg p-3 hover:bg-gray-50"
+                      onClick={() => setActiveChatId(pinItem.conversation_id)}
+                    >
+                      <div className="text-xs text-gray-500 mb-1">{pinItem.conversation_title || 'Chat'}</div>
+                      <div className="text-sm text-gray-800 line-clamp-2">{pinItem.content}</div>
+                      <div className="text-[11px] text-gray-500 mt-2">{formatDateTime(pinItem.pinned_at)}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Recommendations */}

@@ -154,6 +154,22 @@ function ensureChatTables() {
   try {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_person_updated ON ai_conversations(user_id, person_id, updated_at)`);
   } catch (_) {}
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_message_pins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        person_id INTEGER NOT NULL,
+        message_id INTEGER NOT NULL,
+        note TEXT,
+        pinned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, person_id, message_id)
+      )
+    `);
+  } catch (_) {}
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_message_pins_user_person_pinned_at ON ai_message_pins(user_id, person_id, pinned_at DESC)`);
+  } catch (_) {}
   chatTablesEnsured = true;
 }
 
@@ -525,15 +541,98 @@ router.get('/person/:personId/conversations/:id/messages', authenticateToken, (r
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
     const rows = db.prepare(
-      `SELECT id, role, content, created_at
-       FROM ai_messages
-       WHERE conversation_id = ?
-       ORDER BY id ASC`
-    ).all(conversationId);
+      `SELECT
+         m.id,
+         m.role,
+         m.content,
+         m.created_at,
+         CASE WHEN p.id IS NULL THEN 0 ELSE 1 END AS is_pinned,
+         p.note AS pinned_note,
+         p.pinned_at
+       FROM ai_messages m
+       LEFT JOIN ai_message_pins p
+         ON p.message_id = m.id
+        AND p.user_id = ?
+        AND p.person_id = ?
+       WHERE m.conversation_id = ?
+       ORDER BY m.id ASC`
+    ).all(req.user.userId, personId, conversationId);
     return res.json({ messages: rows });
   } catch (e) {
     console.error('Get person messages error:', e);
     return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+router.get('/person/:personId/pins', authenticateToken, (req, res) => {
+  try {
+    ensureChatTables();
+    const personId = Number(req.params.personId);
+    const db = getDatabase();
+    const rows = db.prepare(
+      `SELECT
+         p.id,
+         p.message_id,
+         p.note,
+         p.pinned_at,
+         m.role,
+         m.content,
+         m.created_at,
+         c.id AS conversation_id,
+         c.title AS conversation_title
+       FROM ai_message_pins p
+       JOIN ai_messages m ON m.id = p.message_id
+       JOIN ai_conversations c ON c.id = m.conversation_id
+       WHERE p.user_id = ?
+         AND p.person_id = ?
+         AND c.user_id = ?
+         AND c.person_id = ?
+       ORDER BY p.pinned_at DESC`
+    ).all(req.user.userId, personId, req.user.userId, personId);
+    return res.json({ pins: rows });
+  } catch (e) {
+    console.error('List person pins error:', e);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+router.post('/person/:personId/messages/:messageId/pin', authenticateToken, (req, res) => {
+  try {
+    ensureChatTables();
+    const personId = Number(req.params.personId);
+    const messageId = Number(req.params.messageId);
+    const shouldPin = req.body?.pinned !== false;
+    const note = (req.body?.note || '').toString().trim() || null;
+    const db = getDatabase();
+
+    const row = db.prepare(
+      `SELECT m.id
+       FROM ai_messages m
+       JOIN ai_conversations c ON c.id = m.conversation_id
+       WHERE m.id = ?
+         AND c.user_id = ?
+         AND c.person_id = ?`
+    ).get(messageId, req.user.userId, personId);
+    if (!row) return res.status(404).json({ error: 'Message not found' });
+
+    if (shouldPin) {
+      db.prepare(
+        `INSERT INTO ai_message_pins (user_id, person_id, message_id, note)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, person_id, message_id)
+         DO UPDATE SET note=excluded.note, pinned_at=CURRENT_TIMESTAMP`
+      ).run(req.user.userId, personId, messageId, note);
+      return res.json({ status: 'pinned' });
+    }
+
+    db.prepare(
+      `DELETE FROM ai_message_pins
+       WHERE user_id = ? AND person_id = ? AND message_id = ?`
+    ).run(req.user.userId, personId, messageId);
+    return res.json({ status: 'unpinned' });
+  } catch (e) {
+    console.error('Pin person message error:', e);
+    return res.status(500).json({ error: 'Failed to update pin' });
   }
 });
 

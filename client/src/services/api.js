@@ -106,7 +106,10 @@ export const peopleAPI = {
   getPersonChatMessages: (personId, conversationId) => api.get(`/chat/person/${personId}/conversations/${conversationId}/messages`),
   sendPersonChatMessage: (personId, { conversationId, message, useMemory = true, model }) =>
     api.post('/chat/message', { conversationId, message, useMemory, model, personId }),
-  deletePersonChat: (personId, conversationId) => api.delete(`/chat/person/${personId}/conversations/${conversationId}`)
+  deletePersonChat: (personId, conversationId) => api.delete(`/chat/person/${personId}/conversations/${conversationId}`),
+  listPersonPins: (personId) => api.get(`/chat/person/${personId}/pins`),
+  pinPersonMessage: (personId, messageId, payload = { pinned: true }) =>
+    api.post(`/chat/person/${personId}/messages/${messageId}/pin`, payload)
 };
 
   // Jokes API
