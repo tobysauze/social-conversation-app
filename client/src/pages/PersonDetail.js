@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -22,11 +22,12 @@ import {
   Pin,
   PinOff
 } from 'lucide-react';
-import { peopleAPI, jokesAPI } from '../services/api';
+import { peopleAPI, jokesAPI, chatAPI } from '../services/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
 const PersonDetail = () => {
+  const MODEL_STORAGE_KEY = 'llm_model';
   const { id } = useParams();
   const navigate = useNavigate();
   const [person, setPerson] = useState(null);
@@ -55,6 +56,14 @@ const PersonDetail = () => {
   const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [loadingPins, setLoadingPins] = useState(false);
+  const [llmProvider, setLlmProvider] = useState(null);
+  const [selectedModel, setSelectedModel] = useState(
+    () => localStorage.getItem(MODEL_STORAGE_KEY) || 'openai/gpt-4o-mini'
+  );
+  const [allModels, setAllModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   const coerceToArray = (value) => {
     if (Array.isArray(value)) {
@@ -152,6 +161,16 @@ const PersonDetail = () => {
     return (m.content || '').toLowerCase().includes(q);
   });
 
+  const visibleModels = useMemo(() => {
+    const q = modelSearch.trim().toLowerCase();
+    if (!q) return allModels;
+    return allModels.filter(
+      (m) =>
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.id || '').toLowerCase().includes(q)
+    );
+  }, [allModels, modelSearch]);
+
   const handleAddQuickNote = async () => {
     if (!quickNote.trim()) return;
     setSavingQuickNote(true);
@@ -175,7 +194,30 @@ const PersonDetail = () => {
     loadJokes();
     loadPersonChats();
     loadPinnedMessages();
+    (async () => {
+      try {
+        const v = await chatAPI.version();
+        setLlmProvider(v.data?.provider || null);
+      } catch (e) {
+        console.error('Error reading chat provider:', e);
+      }
+      try {
+        setModelsLoading(true);
+        const modelsRes = await chatAPI.models('');
+        setAllModels(modelsRes.data?.models || []);
+      } catch (e) {
+        console.error('Error loading OpenRouter models:', e);
+      } finally {
+        setModelsLoading(false);
+      }
+    })();
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try {
+      if (selectedModel) localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
+    } catch (_) {}
+  }, [selectedModel]);
 
   useEffect(() => {
     loadPersonMessages(activeChatId);
@@ -303,7 +345,7 @@ const PersonDetail = () => {
         conversationId: activeChatId,
         message: text,
         useMemory: true,
-        model: localStorage.getItem('llm_model') || undefined
+        model: selectedModel || undefined
       });
       const convId = res.data.conversationId;
       if (!activeChatId && convId) {
@@ -1020,6 +1062,59 @@ const PersonDetail = () => {
               <p className="text-xs text-gray-600 mb-3">
                 This chat uses this person&apos;s profile as context and saves history with timestamps.
               </p>
+
+              {llmProvider === 'openrouter' && (
+                <div className="mb-3 border border-gray-200 rounded-lg p-3 bg-white">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-xs text-gray-600">Model</div>
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs"
+                      onClick={() => setShowModelPicker((v) => !v)}
+                    >
+                      {showModelPicker ? 'Hide models' : 'Choose model'}
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-900 truncate">{selectedModel}</div>
+                  {showModelPicker && (
+                    <div className="mt-2">
+                      <div className="relative mb-2">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                        <input
+                          className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          placeholder="Search OpenRouter models..."
+                          value={modelSearch}
+                          onChange={(e) => setModelSearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="max-h-48 overflow-auto border border-gray-200 rounded-lg">
+                        {modelsLoading ? (
+                          <div className="p-2 text-sm text-gray-500">Loading models...</div>
+                        ) : visibleModels.length === 0 ? (
+                          <div className="p-2 text-sm text-gray-500">No models found</div>
+                        ) : (
+                          visibleModels.map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm border-b last:border-b-0 hover:bg-gray-50 ${
+                                selectedModel === m.id ? 'bg-primary-50 text-primary-700' : 'text-gray-800'
+                              }`}
+                              onClick={() => {
+                                setSelectedModel(m.id);
+                                setShowModelPicker(false);
+                              }}
+                            >
+                              <div className="font-medium truncate">{m.name || m.id}</div>
+                              <div className="text-xs text-gray-500 truncate">{m.id}</div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-2 mb-3">
                 <div className="relative">
