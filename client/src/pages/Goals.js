@@ -139,6 +139,9 @@ const Goals = () => {
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-3xl font-bold flex items-center mb-6"><Target className="w-7 h-7 text-green-600 mr-2"/>Goals</h1>
+      <p className="text-gray-600 -mt-4 mb-6">
+        Things you want to achieve & things you want to experience in life.
+      </p>
 
       <div className="card mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
         <input className="input-field" placeholder="Title" value={form.title} onChange={(e)=>setForm(prev=>({ ...prev, title: e.target.value }))} />

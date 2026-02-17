@@ -14,7 +14,10 @@ import {
   Clock,
   Plus,
   X,
-  Laugh
+  Laugh,
+  Bot,
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { peopleAPI, jokesAPI } from '../services/api';
 import { format } from 'date-fns';
@@ -36,6 +39,13 @@ const PersonDetail = () => {
   const [showAddJoke, setShowAddJoke] = useState(false);
   const [newJoke, setNewJoke] = useState({ title: '', content: '' });
   const [addingJoke, setAddingJoke] = useState(false);
+  const [personChats, setPersonChats] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [personMessages, setPersonMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [loadingPersonChats, setLoadingPersonChats] = useState(false);
+  const [loadingPersonMessages, setLoadingPersonMessages] = useState(false);
+  const [sendingPersonMessage, setSendingPersonMessage] = useState(false);
 
   const coerceToArray = (value) => {
     if (Array.isArray(value)) {
@@ -101,6 +111,13 @@ const PersonDetail = () => {
     return format(d, 'MMM d, yyyy');
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    return format(d, 'MMM d, yyyy h:mm a');
+  };
+
   const handleAddQuickNote = async () => {
     if (!quickNote.trim()) return;
     setSavingQuickNote(true);
@@ -122,7 +139,12 @@ const PersonDetail = () => {
   useEffect(() => {
     loadPerson();
     loadJokes();
+    loadPersonChats();
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadPersonMessages(activeChatId);
+  }, [activeChatId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPerson = async () => {
     try {
@@ -162,6 +184,100 @@ const PersonDetail = () => {
       // Don't show error toast for jokes as it's not critical
     } finally {
       setLoadingJokes(false);
+    }
+  };
+
+  const loadPersonChats = async () => {
+    setLoadingPersonChats(true);
+    try {
+      const res = await peopleAPI.listPersonChats(id);
+      const chats = res.data.conversations || [];
+      setPersonChats(chats);
+      if (chats.length > 0) {
+        setActiveChatId((prev) => prev || chats[0].id);
+      } else {
+        setActiveChatId(null);
+        setPersonMessages([]);
+      }
+    } catch (error) {
+      console.error('Error loading person chats:', error);
+      toast.error('Failed to load person chat history');
+    } finally {
+      setLoadingPersonChats(false);
+    }
+  };
+
+  const loadPersonMessages = async (conversationId) => {
+    if (!conversationId) {
+      setPersonMessages([]);
+      return;
+    }
+    setLoadingPersonMessages(true);
+    try {
+      const res = await peopleAPI.getPersonChatMessages(id, conversationId);
+      setPersonMessages(res.data.messages || []);
+    } catch (error) {
+      console.error('Error loading person chat messages:', error);
+      toast.error('Failed to load messages');
+    } finally {
+      setLoadingPersonMessages(false);
+    }
+  };
+
+  const sendPersonMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || sendingPersonMessage) return;
+    setSendingPersonMessage(true);
+    setChatInput('');
+
+    const optimistic = {
+      id: `tmp-${Date.now()}`,
+      role: 'user',
+      content: text,
+      created_at: new Date().toISOString()
+    };
+    setPersonMessages((prev) => [...prev, optimistic]);
+
+    try {
+      const res = await peopleAPI.sendPersonChatMessage(id, {
+        conversationId: activeChatId,
+        message: text,
+        useMemory: true,
+        model: localStorage.getItem('llm_model') || undefined
+      });
+      const convId = res.data.conversationId;
+      if (!activeChatId && convId) {
+        setActiveChatId(convId);
+      }
+      await Promise.all([loadPersonChats(), loadPersonMessages(convId || activeChatId)]);
+    } catch (error) {
+      console.error('Error sending person chat message:', error);
+      setPersonMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setChatInput(text);
+      toast.error(error.response?.data?.error || 'Failed to send message');
+    } finally {
+      setSendingPersonMessage(false);
+    }
+  };
+
+  const startNewPersonChat = () => {
+    setActiveChatId(null);
+    setPersonMessages([]);
+  };
+
+  const deletePersonChat = async (conversationId) => {
+    if (!window.confirm('Delete this chat for this person?')) return;
+    try {
+      await peopleAPI.deletePersonChat(id, conversationId);
+      await loadPersonChats();
+      if (Number(activeChatId) === Number(conversationId)) {
+        setActiveChatId(null);
+        setPersonMessages([]);
+      }
+      toast.success('Chat deleted');
+    } catch (error) {
+      console.error('Error deleting person chat:', error);
+      toast.error('Failed to delete chat');
     }
   };
 
@@ -826,6 +942,107 @@ const PersonDetail = () => {
                       Get Story Recommendations
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+
+            {/* Person-specific AI chat */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Bot className="w-5 h-5 mr-2 text-primary-600" />
+                  AI Chat About {person.name}
+                </h3>
+                <button onClick={startNewPersonChat} className="btn-secondary text-xs">New Chat</button>
+              </div>
+
+              <p className="text-xs text-gray-600 mb-3">
+                This chat uses this person&apos;s profile as context and saves history with timestamps.
+              </p>
+
+              <div className="border border-gray-200 rounded-lg mb-3 max-h-32 overflow-auto">
+                {loadingPersonChats ? (
+                  <div className="p-3 text-sm text-gray-500">Loading chats...</div>
+                ) : personChats.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-500">No chats yet. Start one below.</div>
+                ) : (
+                  personChats.map((chat) => (
+                    <div
+                      key={chat.id}
+                      className={`px-3 py-2 border-b last:border-b-0 cursor-pointer ${
+                        Number(activeChatId) === Number(chat.id) ? 'bg-primary-50' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => setActiveChatId(chat.id)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{chat.title || 'Untitled chat'}</div>
+                          <div className="text-[11px] text-gray-500">{formatDateTime(chat.updated_at || chat.created_at)}</div>
+                        </div>
+                        <button
+                          className="text-red-600 hover:text-red-700 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deletePersonChat(chat.id);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-3 h-64 overflow-auto mb-3 space-y-2 bg-gray-50">
+                {loadingPersonMessages ? (
+                  <div className="text-sm text-gray-500">Loading messages...</div>
+                ) : personMessages.length === 0 ? (
+                  <div className="text-sm text-gray-500">
+                    Ask about how to connect with {person.name}, what stories to tell, or how to approach a conversation.
+                  </div>
+                ) : (
+                  personMessages.map((m) => (
+                    <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className="max-w-[90%]">
+                        <div
+                          className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                            m.role === 'user'
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-white border border-gray-200 text-gray-900'
+                          }`}
+                        >
+                          {m.content}
+                        </div>
+                        <div className={`text-[11px] mt-1 ${m.role === 'user' ? 'text-right text-gray-500' : 'text-gray-500'}`}>
+                          {formatDateTime(m.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex items-end gap-2">
+                <textarea
+                  rows={2}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  placeholder={`Message about ${person.name}...`}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendPersonMessage();
+                    }
+                  }}
+                />
+                <button
+                  onClick={sendPersonMessage}
+                  disabled={sendingPersonMessage || !chatInput.trim()}
+                  className="btn-primary flex items-center"
+                >
+                  {sendingPersonMessage ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </div>
             </div>

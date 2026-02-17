@@ -22,6 +22,7 @@ import Chat from './pages/Chat';
 import Triggers from './pages/Triggers';
 import Beliefs from './pages/Beliefs';
 import Protocols from './pages/Protocols';
+import Dating from './pages/Dating';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -208,6 +209,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Protocols />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dating"
+            element={
+              <ProtectedRoute>
+                <Dating />
               </ProtectedRoute>
             }
           />

@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { getDatabase, dbPath, ensureSqliteUser } = require('../database/init');
+const { prisma } = require('../prisma/client');
 const OpenAI = require('openai');
 
 const router = express.Router();
@@ -143,6 +144,54 @@ router.post('/_dbtest', authenticateToken, (req, res) => {
 
 const nowSql = () => "DATETIME('now')";
 
+let chatTablesEnsured = false;
+function ensureChatTables() {
+  if (chatTablesEnsured) return;
+  const db = getDatabase();
+  try {
+    db.exec(`ALTER TABLE ai_conversations ADD COLUMN person_id INTEGER`);
+  } catch (_) {}
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_person_updated ON ai_conversations(user_id, person_id, updated_at)`);
+  } catch (_) {}
+  chatTablesEnsured = true;
+}
+
+async function getPersonContextForUser(userId, personId) {
+  if (!personId) return '';
+  const person = await prisma.person.findFirst({
+    where: { id: Number(personId), userId: Number(userId) }
+  });
+  if (!person) return '';
+
+  const safeList = (value) => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  };
+
+  const interests = safeList(person.interests);
+  const traits = safeList(person.personalityTraits);
+  const shared = safeList(person.sharedExperiences);
+  const preferences = safeList(person.storyPreferences);
+
+  return [
+    `Person: ${person.name}`,
+    `Relationship: ${person.relationship || 'unknown'}`,
+    `How we met: ${person.howMet || 'unknown'}`,
+    `Conversation style: ${person.conversationStyle || 'unknown'}`,
+    `Interests: ${interests.join(', ') || 'none'}`,
+    `Personality traits: ${traits.join(', ') || 'none'}`,
+    `Shared experiences: ${shared.join(', ') || 'none'}`,
+    `Story preferences: ${preferences.join(', ') || 'none'}`,
+    `Notes: ${person.notes || 'none'}`
+  ].join('\n');
+}
+
 function makeTitleFromMessage(msg) {
   const s = (msg || '').trim().replace(/\s+/g, ' ');
   if (!s) return 'New chat';
@@ -184,7 +233,7 @@ Return ONLY the bullet points.`;
   return res.choices?.[0]?.message?.content?.trim() || null;
 }
 
-async function getAssistantReply({ model, memorySummaries, messages }) {
+async function getAssistantReply({ model, memorySummaries, messages, personContext = '' }) {
   if (!LLM_API_KEY) {
     return `AI is not configured on the server yet. Set OPENROUTER_API_KEY and restart the backend.`;
   }
@@ -192,8 +241,11 @@ async function getAssistantReply({ model, memorySummaries, messages }) {
   const memoryBlock = (memorySummaries || []).length
     ? `\n\nSaved chat memory (summaries of the user's prior chats):\n${memorySummaries.map((s, i) => `(${i + 1}) ${s}`).join('\n')}\n`
     : '';
+  const personBlock = personContext
+    ? `\n\nPerson context for this conversation:\n${personContext}\nUse this context to tailor advice/messages specifically for this person.`
+    : '';
 
-  const system = `You are a helpful, friendly AI chat assistant. Be conversational, ask clarifying questions when needed, and keep responses grounded and practical.${memoryBlock}
+  const system = `You are a helpful, friendly AI chat assistant. Be conversational, ask clarifying questions when needed, and keep responses grounded and practical.${memoryBlock}${personBlock}
 Use the saved chat memory as background context when it’s relevant. Do NOT invent details if memory doesn’t specify them.`;
 
   const res = await openai.chat.completions.create({
@@ -212,11 +264,13 @@ Use the saved chat memory as background context when it’s relevant. Do NOT inv
 // List conversations
 router.get('/conversations', authenticateToken, (req, res) => {
   try {
+    ensureChatTables();
     const db = getDatabase();
     const rows = db.prepare(
       `SELECT id, title, summary, created_at, updated_at
        FROM ai_conversations
        WHERE user_id = ?
+         AND person_id IS NULL
        ORDER BY updated_at DESC`
     ).all(req.user.userId);
     return res.json({ conversations: rows });
@@ -229,10 +283,11 @@ router.get('/conversations', authenticateToken, (req, res) => {
 // Get messages for a conversation
 router.get('/conversations/:id/messages', authenticateToken, (req, res) => {
   try {
+    ensureChatTables();
     const conversationId = Number(req.params.id);
     const db = getDatabase();
     const conv = db.prepare(
-      `SELECT id FROM ai_conversations WHERE id = ? AND user_id = ?`
+      `SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL`
     ).get(conversationId, req.user.userId);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
@@ -252,6 +307,7 @@ router.get('/conversations/:id/messages', authenticateToken, (req, res) => {
 // Rename a conversation
 router.patch('/conversations/:id', authenticateToken, (req, res) => {
   try {
+    ensureChatTables();
     const conversationId = Number(req.params.id);
     const title = (req.body?.title || '').toString().trim();
     if (!title) return res.status(400).json({ error: 'title is required' });
@@ -261,7 +317,7 @@ router.patch('/conversations/:id', authenticateToken, (req, res) => {
     ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
 
     const existing = db
-      .prepare(`SELECT id FROM ai_conversations WHERE id = ? AND user_id = ?`)
+      .prepare(`SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL`)
       .get(conversationId, uid);
     if (!existing) return res.status(404).json({ error: 'Conversation not found' });
 
@@ -283,25 +339,34 @@ router.patch('/conversations/:id', authenticateToken, (req, res) => {
 
 // Send a message (creates a conversation if needed)
 router.post('/message', authenticateToken, async (req, res) => {
-  const { conversationId, message, useMemory = true } = req.body || {};
+  const { conversationId, message, useMemory = true, personId = null } = req.body || {};
   const userMessage = (message || '').toString().trim();
   if (!userMessage) return res.status(400).json({ error: 'message is required' });
 
   try {
+    ensureChatTables();
     const db = getDatabase();
     const uid = req.user.userId;
     ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
+    const personIdNum = personId ? Number(personId) : null;
 
     let convId = conversationId ? Number(conversationId) : null;
     try {
       if (convId) {
-        const conv = db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ?').get(convId, uid);
+        const conv = personIdNum
+          ? db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id = ?').get(convId, uid, personIdNum)
+          : db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL').get(convId, uid);
         if (!conv) return res.status(404).json({ error: 'Conversation not found' });
       } else {
-        const info = db.prepare(
-          `INSERT INTO ai_conversations (user_id, title)
-           VALUES (?, ?)`
-        ).run(uid, makeTitleFromMessage(userMessage));
+        const info = personIdNum
+          ? db.prepare(
+              `INSERT INTO ai_conversations (user_id, title, person_id)
+               VALUES (?, ?, ?)`
+            ).run(uid, makeTitleFromMessage(userMessage), personIdNum)
+          : db.prepare(
+              `INSERT INTO ai_conversations (user_id, title, person_id)
+               VALUES (?, ?, NULL)`
+            ).run(uid, makeTitleFromMessage(userMessage));
         convId = Number(info.lastInsertRowid);
       }
 
@@ -334,27 +399,44 @@ router.post('/message', authenticateToken, async (req, res) => {
 
     // Load memory summaries from other conversations
     const memorySummaries = useMemory
-      ? db.prepare(
-          `SELECT summary
-           FROM ai_conversations
-           WHERE user_id = ?
-             AND id != ?
-             AND summary IS NOT NULL
-             AND TRIM(summary) != ''
-           ORDER BY updated_at DESC
-           LIMIT 8`
-        ).all(uid, convId).map(r => r.summary)
+      ? (personIdNum
+          ? db.prepare(
+              `SELECT summary
+               FROM ai_conversations
+               WHERE user_id = ?
+                 AND id != ?
+                 AND person_id = ?
+                 AND summary IS NOT NULL
+                 AND TRIM(summary) != ''
+               ORDER BY updated_at DESC
+               LIMIT 8`
+            ).all(uid, convId, personIdNum)
+          : db.prepare(
+              `SELECT summary
+               FROM ai_conversations
+               WHERE user_id = ?
+                 AND id != ?
+                 AND person_id IS NULL
+                 AND summary IS NOT NULL
+                 AND TRIM(summary) != ''
+               ORDER BY updated_at DESC
+               LIMIT 8`
+            ).all(uid, convId)
+        ).map((r) => r.summary)
       : [];
 
     // Get assistant reply; if OpenAI errors, degrade gracefully instead of 500-ing the whole request.
     const chosenModel = pickModel(req);
+
+    const personContext = personIdNum ? await getPersonContextForUser(uid, personIdNum) : '';
 
     let assistantText;
     try {
       assistantText = await getAssistantReply({
         model: chosenModel,
         memorySummaries,
-        messages: recentRows
+        messages: recentRows,
+        personContext
       });
     } catch (aiErr) {
       console.error('AI chat completion failed:', aiErr);
@@ -411,13 +493,75 @@ router.post('/message', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete a conversation
-router.delete('/conversations/:id', authenticateToken, (req, res) => {
+// List conversations for one person context
+router.get('/person/:personId/conversations', authenticateToken, (req, res) => {
   try {
+    ensureChatTables();
+    const personId = Number(req.params.personId);
+    const db = getDatabase();
+    const rows = db.prepare(
+      `SELECT id, title, summary, created_at, updated_at
+       FROM ai_conversations
+       WHERE user_id = ?
+         AND person_id = ?
+       ORDER BY updated_at DESC`
+    ).all(req.user.userId, personId);
+    return res.json({ conversations: rows });
+  } catch (e) {
+    console.error('List person conversations error:', e);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+router.get('/person/:personId/conversations/:id/messages', authenticateToken, (req, res) => {
+  try {
+    ensureChatTables();
+    const personId = Number(req.params.personId);
+    const conversationId = Number(req.params.id);
+    const db = getDatabase();
+    const conv = db.prepare(
+      `SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id = ?`
+    ).get(conversationId, req.user.userId, personId);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    const rows = db.prepare(
+      `SELECT id, role, content, created_at
+       FROM ai_messages
+       WHERE conversation_id = ?
+       ORDER BY id ASC`
+    ).all(conversationId);
+    return res.json({ messages: rows });
+  } catch (e) {
+    console.error('Get person messages error:', e);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+router.delete('/person/:personId/conversations/:id', authenticateToken, (req, res) => {
+  try {
+    ensureChatTables();
+    const personId = Number(req.params.personId);
     const conversationId = Number(req.params.id);
     const db = getDatabase();
     const info = db.prepare(
-      `DELETE FROM ai_conversations WHERE id = ? AND user_id = ?`
+      `DELETE FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id = ?`
+    ).run(conversationId, req.user.userId, personId);
+    if (!info.changes) return res.status(404).json({ error: 'Conversation not found' });
+    return res.json({ status: 'deleted' });
+  } catch (e) {
+    console.error('Delete person conversation error:', e);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Delete a conversation
+router.delete('/conversations/:id', authenticateToken, (req, res) => {
+  try {
+    ensureChatTables();
+    const conversationId = Number(req.params.id);
+    const db = getDatabase();
+    const info = db.prepare(
+      `DELETE FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL`
     ).run(conversationId, req.user.userId);
     if (!info.changes) return res.status(404).json({ error: 'Conversation not found' });
     return res.json({ status: 'deleted' });

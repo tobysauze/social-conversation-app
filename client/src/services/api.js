@@ -101,7 +101,12 @@ export const peopleAPI = {
   tagJournal: (personId, journalId) => api.post(`/people/${personId}/tag-journal/${journalId}`),
   untagJournal: (personId, journalId) => api.delete(`/people/${personId}/tag-journal/${journalId}`),
   analyzeJournal: (journalContent) => api.post('/people/analyze-journal', { journalContent }),
-  applyInsights: (personId, insights) => api.post(`/people/${personId}/apply-insights`, { insights })
+  applyInsights: (personId, insights) => api.post(`/people/${personId}/apply-insights`, { insights }),
+  listPersonChats: (personId) => api.get(`/chat/person/${personId}/conversations`),
+  getPersonChatMessages: (personId, conversationId) => api.get(`/chat/person/${personId}/conversations/${conversationId}/messages`),
+  sendPersonChatMessage: (personId, { conversationId, message, useMemory = true, model }) =>
+    api.post('/chat/message', { conversationId, message, useMemory, model, personId }),
+  deletePersonChat: (personId, conversationId) => api.delete(`/chat/person/${personId}/conversations/${conversationId}`)
 };
 
   // Jokes API
@@ -153,6 +158,11 @@ export const goalsAPI = {
   create: (data) => api.post('/goals', data),
   update: (id, data) => api.patch(`/goals/${id}`, data),
   remove: (id) => api.delete(`/goals/${id}`)
+};
+
+export const datingAPI = {
+  get: () => api.get('/dating'),
+  save: (data) => api.post('/dating', data)
 };
 
 // Triggers API

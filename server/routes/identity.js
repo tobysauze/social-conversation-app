@@ -6,6 +6,18 @@ const { generateIdentityVision } = require('../services/openai');
 
 const router = express.Router();
 
+function parseJsonArraySafe(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 let ensured = false;
 async function ensureTables() {
   if (ensured) return;
@@ -58,7 +70,15 @@ router.get('/', authenticateToken, async (req, res) => {
     const rows = await prisma.$queryRawUnsafe(`SELECT * FROM identity_visions WHERE user_id=$1 LIMIT 1`, req.user.userId);
     if (!rows.length) return res.json({ identity: { vision: '', values: [], principles: [], traits: [], vision_points: [] } });
     const r = rows[0];
-    res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [], traits: r.traits ? JSON.parse(r.traits) : [], vision_points: r.vision_points ? JSON.parse(r.vision_points) : [] } });
+    res.json({
+      identity: {
+        vision: r.vision || '',
+        values: parseJsonArraySafe(r.values),
+        principles: parseJsonArraySafe(r.principles),
+        traits: parseJsonArraySafe(r.traits),
+        vision_points: parseJsonArraySafe(r.vision_points)
+      }
+    });
   } catch (e) {
     console.error('Identity GET (Postgres) error:', e);
     // Fallback to SQLite
@@ -66,7 +86,15 @@ router.get('/', authenticateToken, async (req, res) => {
       const db = getDatabase();
       const r = db.prepare('SELECT * FROM identity_visions WHERE user_id = ? LIMIT 1').get(req.user.userId);
       if (!r) return res.json({ identity: { vision: '', values: [], principles: [], traits: [], vision_points: [] } });
-      res.json({ identity: { vision: r.vision || '', values: r.values ? JSON.parse(r.values) : [], principles: r.principles ? JSON.parse(r.principles) : [], traits: r.traits ? JSON.parse(r.traits) : [], vision_points: r.vision_points ? JSON.parse(r.vision_points) : [] } });
+      res.json({
+        identity: {
+          vision: r.vision || '',
+          values: parseJsonArraySafe(r.values),
+          principles: parseJsonArraySafe(r.principles),
+          traits: parseJsonArraySafe(r.traits),
+          vision_points: parseJsonArraySafe(r.vision_points)
+        }
+      });
     } catch (sqliteErr) {
       console.error('Identity GET (SQLite) error:', sqliteErr);
       res.status(500).json({ error: 'Database error' });

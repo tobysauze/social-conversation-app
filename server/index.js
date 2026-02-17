@@ -21,6 +21,7 @@ const chatRoutes = require('./routes/chat');
 const genomeRoutes = require('./routes/genome');
 const triggersRoutes = require('./routes/triggers');
 const beliefsRoutes = require('./routes/beliefs');
+const datingRoutes = require('./routes/dating');
 const { initDatabase } = require('./database/init');
 // Prisma client (Postgres)
 let prisma = null;
@@ -106,6 +107,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/genome', genomeRoutes);
 app.use('/api/triggers', triggersRoutes);
 app.use('/api/beliefs', beliefsRoutes);
+app.use('/api/dating', datingRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -77,9 +77,11 @@ const JournalInsightsModal = ({ isOpen, onClose, insights, onApplied }) => {
   };
 
   const mergeUnique = (existing, additions) => {
-    const seen = new Set(existing.map((v) => v.toLowerCase()));
-    const merged = [...existing];
-    additions.forEach((item) => {
+    const base = Array.isArray(existing) ? existing : [];
+    const incoming = Array.isArray(additions) ? additions : [];
+    const seen = new Set(base.map((v) => String(v).toLowerCase()));
+    const merged = [...base];
+    incoming.forEach((item) => {
       const trimmed = (item || '').toString().trim();
       if (!trimmed) return;
       const key = trimmed.toLowerCase();
@@ -109,7 +111,7 @@ const JournalInsightsModal = ({ isOpen, onClose, insights, onApplied }) => {
       toast.success('Identity updated');
     } catch (e) {
       console.error(e);
-      toast.error('Failed to update identity');
+      toast.error(e?.response?.data?.error || 'Failed to update identity');
     } finally {
       markApplying(key, false);
     }

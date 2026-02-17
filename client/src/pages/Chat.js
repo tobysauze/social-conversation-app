@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Bot, Plus, Trash2, Send, RefreshCw, Search, Pencil, Check } from 'lucide-react';
 import { chatAPI } from '../services/api';
+import { format } from 'date-fns';
 
 const MODEL_STORAGE_KEY = 'llm_model';
 const OPENROUTER_MODELS = [
@@ -21,6 +22,13 @@ const fmtCost = (v) => {
   return `$${n.toFixed(2)}`;
 };
 
+const formatDateTime = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return format(d, 'MMM d, yyyy h:mm a');
+};
+
 const Chat = () => {
   const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -33,7 +41,6 @@ const Chat = () => {
   const [provider, setProvider] = useState(null); // 'openrouter' | 'none'
   const [defaultModel, setDefaultModel] = useState(null);
   const [model, setModel] = useState(() => localStorage.getItem(MODEL_STORAGE_KEY) || 'openai/gpt-4o-mini');
-  const [customModel, setCustomModel] = useState('');
   const [modelQuery, setModelQuery] = useState('');
   const [allModels, setAllModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -285,7 +292,6 @@ const Chat = () => {
                 value={model}
                 onChange={(e) => {
                   setModel(e.target.value);
-                  setCustomModel('');
                 }}
                 className="input-field bg-white text-black h-9 py-1"
                 style={{ minWidth: 200 }}
@@ -392,6 +398,9 @@ const Chat = () => {
                           <div className="text-sm font-medium text-gray-900 truncate">{c.title || 'Untitled'}</div>
                         )}
                         <div className="text-xs text-gray-600 truncate">{c.summary || '—'}</div>
+                        <div className="text-[11px] text-gray-500 mt-1">
+                          {c.updated_at ? `Updated ${formatDateTime(c.updated_at)}` : c.created_at ? `Created ${formatDateTime(c.created_at)}` : ''}
+                        </div>
                       </div>
                       <div className="flex items-center gap-1">
                         {Number(renamingId) !== Number(c.id) && (
@@ -462,14 +471,19 @@ const Chat = () => {
             ) : (
               messages.map((m) => (
                 <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
-                      m.role === 'user'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-white border border-gray-200 text-gray-900'
-                    }`}
-                  >
-                    {m.content}
+                  <div className="max-w-[85%]">
+                    <div
+                      className={`rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
+                        m.role === 'user'
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-white border border-gray-200 text-gray-900'
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+                    <div className={`text-[11px] mt-1 ${m.role === 'user' ? 'text-right text-gray-500' : 'text-gray-500'}`}>
+                      {formatDateTime(m.created_at)}
+                    </div>
                   </div>
                 </div>
               ))
