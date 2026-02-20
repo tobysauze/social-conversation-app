@@ -332,4 +332,306 @@ router.post('/:id/apply-insights', authenticateToken, async (req, res) => {
   }
 });
 
+// --- Text message uploads ---
+
+// List text uploads for a person
+router.get('/:id/texts', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const uploads = await prisma.personTextUpload.findMany({
+      where: { personId: person.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, label: true, createdAt: true, updatedAt: true }
+    });
+    res.json({ uploads });
+  } catch (e) {
+    console.error('List text uploads error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Get a single text upload (with content)
+router.get('/:id/texts/:textId', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const upload = await prisma.personTextUpload.findFirst({
+      where: { id: Number(req.params.textId), personId: person.id }
+    });
+    if (!upload) return res.status(404).json({ error: 'Text upload not found' });
+
+    res.json({ upload });
+  } catch (e) {
+    console.error('Get text upload error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Create a text upload
+router.post('/:id/texts', authenticateToken, async (req, res) => {
+  const { label, content } = req.body;
+  if (!label || !content) {
+    return res.status(400).json({ error: 'Label and content are required' });
+  }
+
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const upload = await prisma.personTextUpload.create({
+      data: { personId: person.id, label, content }
+    });
+    res.status(201).json({ upload });
+  } catch (e) {
+    console.error('Create text upload error:', e);
+    res.status(500).json({ error: 'Failed to save text upload' });
+  }
+});
+
+// Update a text upload
+router.put('/:id/texts/:textId', authenticateToken, async (req, res) => {
+  const { label, content } = req.body;
+
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const existing = await prisma.personTextUpload.findFirst({
+      where: { id: Number(req.params.textId), personId: person.id }
+    });
+    if (!existing) return res.status(404).json({ error: 'Text upload not found' });
+
+    const upload = await prisma.personTextUpload.update({
+      where: { id: existing.id },
+      data: {
+        ...(label !== undefined ? { label } : {}),
+        ...(content !== undefined ? { content } : {})
+      }
+    });
+    res.json({ upload });
+  } catch (e) {
+    console.error('Update text upload error:', e);
+    res.status(500).json({ error: 'Failed to update text upload' });
+  }
+});
+
+// Delete a text upload
+router.delete('/:id/texts/:textId', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const existing = await prisma.personTextUpload.findFirst({
+      where: { id: Number(req.params.textId), personId: person.id }
+    });
+    if (!existing) return res.status(404).json({ error: 'Text upload not found' });
+
+    await prisma.personTextUpload.delete({ where: { id: existing.id } });
+    res.json({ message: 'Text upload deleted' });
+  } catch (e) {
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Text upload not found' });
+    console.error('Delete text upload error:', e);
+    res.status(500).json({ error: 'Failed to delete text upload' });
+  }
+});
+
+// --- Conversation topics ---
+
+// List topics for a person
+router.get('/:id/topics', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const topics = await prisma.personConversationTopic.findMany({
+      where: { personId: person.id },
+      orderBy: [{ used: 'asc' }, { createdAt: 'desc' }]
+    });
+    res.json({ topics });
+  } catch (e) {
+    console.error('List topics error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Create a topic
+router.post('/:id/topics', authenticateToken, async (req, res) => {
+  const { topic } = req.body;
+  if (!topic || !topic.trim()) {
+    return res.status(400).json({ error: 'Topic text is required' });
+  }
+
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const created = await prisma.personConversationTopic.create({
+      data: { personId: person.id, topic: topic.trim() }
+    });
+    res.status(201).json({ topic: created });
+  } catch (e) {
+    console.error('Create topic error:', e);
+    res.status(500).json({ error: 'Failed to create topic' });
+  }
+});
+
+// Update a topic (edit text or toggle used)
+router.patch('/:id/topics/:topicId', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const existing = await prisma.personConversationTopic.findFirst({
+      where: { id: Number(req.params.topicId), personId: person.id }
+    });
+    if (!existing) return res.status(404).json({ error: 'Topic not found' });
+
+    const data = {};
+    if (req.body.topic !== undefined) data.topic = req.body.topic.trim();
+    if (req.body.used !== undefined) data.used = Boolean(req.body.used);
+
+    const updated = await prisma.personConversationTopic.update({
+      where: { id: existing.id },
+      data
+    });
+    res.json({ topic: updated });
+  } catch (e) {
+    console.error('Update topic error:', e);
+    res.status(500).json({ error: 'Failed to update topic' });
+  }
+});
+
+// Delete a topic
+router.delete('/:id/topics/:topicId', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const existing = await prisma.personConversationTopic.findFirst({
+      where: { id: Number(req.params.topicId), personId: person.id }
+    });
+    if (!existing) return res.status(404).json({ error: 'Topic not found' });
+
+    await prisma.personConversationTopic.delete({ where: { id: existing.id } });
+    res.json({ message: 'Topic deleted' });
+  } catch (e) {
+    console.error('Delete topic error:', e);
+    res.status(500).json({ error: 'Failed to delete topic' });
+  }
+});
+
+// --- Inside jokes ---
+
+router.get('/:id/inside-jokes', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const jokes = await prisma.personInsideJoke.findMany({
+      where: { personId: person.id },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json({ jokes });
+  } catch (e) {
+    console.error('List inside jokes error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+router.post('/:id/inside-jokes', authenticateToken, async (req, res) => {
+  const { joke, context } = req.body;
+  if (!joke || !joke.trim()) {
+    return res.status(400).json({ error: 'Joke text is required' });
+  }
+
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const created = await prisma.personInsideJoke.create({
+      data: {
+        personId: person.id,
+        joke: joke.trim(),
+        context: context?.trim() || null
+      }
+    });
+    res.status(201).json({ joke: created });
+  } catch (e) {
+    console.error('Create inside joke error:', e);
+    res.status(500).json({ error: 'Failed to create inside joke' });
+  }
+});
+
+router.patch('/:id/inside-jokes/:jokeId', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const existing = await prisma.personInsideJoke.findFirst({
+      where: { id: Number(req.params.jokeId), personId: person.id }
+    });
+    if (!existing) return res.status(404).json({ error: 'Inside joke not found' });
+
+    const data = {};
+    if (req.body.joke !== undefined) data.joke = req.body.joke.trim();
+    if (req.body.context !== undefined) data.context = req.body.context?.trim() || null;
+
+    const updated = await prisma.personInsideJoke.update({
+      where: { id: existing.id },
+      data
+    });
+    res.json({ joke: updated });
+  } catch (e) {
+    console.error('Update inside joke error:', e);
+    res.status(500).json({ error: 'Failed to update inside joke' });
+  }
+});
+
+router.delete('/:id/inside-jokes/:jokeId', authenticateToken, async (req, res) => {
+  try {
+    const person = await prisma.person.findFirst({
+      where: { id: Number(req.params.id), userId: req.user.userId }
+    });
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const existing = await prisma.personInsideJoke.findFirst({
+      where: { id: Number(req.params.jokeId), personId: person.id }
+    });
+    if (!existing) return res.status(404).json({ error: 'Inside joke not found' });
+
+    await prisma.personInsideJoke.delete({ where: { id: existing.id } });
+    res.json({ message: 'Inside joke deleted' });
+  } catch (e) {
+    console.error('Delete inside joke error:', e);
+    res.status(500).json({ error: 'Failed to delete inside joke' });
+  }
+});
+
 module.exports = router;

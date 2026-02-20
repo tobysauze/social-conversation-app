@@ -109,7 +109,20 @@ export const peopleAPI = {
   deletePersonChat: (personId, conversationId) => api.delete(`/chat/person/${personId}/conversations/${conversationId}`),
   listPersonPins: (personId) => api.get(`/chat/person/${personId}/pins`),
   pinPersonMessage: (personId, messageId, payload = { pinned: true }) =>
-    api.post(`/chat/person/${personId}/messages/${messageId}/pin`, payload)
+    api.post(`/chat/person/${personId}/messages/${messageId}/pin`, payload),
+  listTextUploads: (personId) => api.get(`/people/${personId}/texts`),
+  getTextUpload: (personId, textId) => api.get(`/people/${personId}/texts/${textId}`),
+  createTextUpload: (personId, data) => api.post(`/people/${personId}/texts`, data),
+  updateTextUpload: (personId, textId, data) => api.put(`/people/${personId}/texts/${textId}`, data),
+  deleteTextUpload: (personId, textId) => api.delete(`/people/${personId}/texts/${textId}`),
+  listTopics: (personId) => api.get(`/people/${personId}/topics`),
+  createTopic: (personId, topic) => api.post(`/people/${personId}/topics`, { topic }),
+  updateTopic: (personId, topicId, data) => api.patch(`/people/${personId}/topics/${topicId}`, data),
+  deleteTopic: (personId, topicId) => api.delete(`/people/${personId}/topics/${topicId}`),
+  listInsideJokes: (personId) => api.get(`/people/${personId}/inside-jokes`),
+  createInsideJoke: (personId, data) => api.post(`/people/${personId}/inside-jokes`, data),
+  updateInsideJoke: (personId, jokeId, data) => api.patch(`/people/${personId}/inside-jokes/${jokeId}`, data),
+  deleteInsideJoke: (personId, jokeId) => api.delete(`/people/${personId}/inside-jokes/${jokeId}`)
 };
 
   // Jokes API

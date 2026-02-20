@@ -195,7 +195,7 @@ async function getPersonContextForUser(userId, personId) {
   const shared = safeList(person.sharedExperiences);
   const preferences = safeList(person.storyPreferences);
 
-  return [
+  const lines = [
     `Person: ${person.name}`,
     `Relationship: ${person.relationship || 'unknown'}`,
     `How we met: ${person.howMet || 'unknown'}`,
@@ -205,7 +205,29 @@ async function getPersonContextForUser(userId, personId) {
     `Shared experiences: ${shared.join(', ') || 'none'}`,
     `Story preferences: ${preferences.join(', ') || 'none'}`,
     `Notes: ${person.notes || 'none'}`
-  ].join('\n');
+  ];
+
+  const textUploads = await prisma.personTextUpload.findMany({
+    where: { personId: Number(personId) },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  });
+
+  if (textUploads.length > 0) {
+    lines.push('');
+    lines.push('=== Past text message conversations with this person ===');
+    lines.push('Use these as reference for how the user and this person talk to each other, what they discuss, their tone, inside jokes, etc.');
+    for (const upload of textUploads) {
+      const maxChars = 3000;
+      const truncated = upload.content.length > maxChars
+        ? upload.content.slice(-maxChars) + '\n... (older messages truncated)'
+        : upload.content;
+      lines.push(`\n--- ${upload.label} ---`);
+      lines.push(truncated);
+    }
+  }
+
+  return lines.join('\n');
 }
 
 function makeTitleFromMessage(msg) {

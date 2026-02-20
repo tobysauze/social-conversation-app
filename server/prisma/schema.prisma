@@ -92,6 +92,45 @@ model Person {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
   user                User     @relation(fields: [userId], references: [id])
+  textUploads         PersonTextUpload[]
+  conversationTopics  PersonConversationTopic[]
+  insideJokes         PersonInsideJoke[]
+}
+
+model PersonTextUpload {
+  id        Int      @id @default(autoincrement())
+  personId  Int      @map("person_id")
+  label     String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_text_uploads")
+}
+
+model PersonConversationTopic {
+  id        Int      @id @default(autoincrement())
+  personId  Int      @map("person_id")
+  topic     String
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_conversation_topics")
+}
+
+model PersonInsideJoke {
+  id        Int      @id @default(autoincrement())
+  personId  Int      @map("person_id")
+  joke      String
+  context   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_inside_jokes")
 }
 
 model Joke {

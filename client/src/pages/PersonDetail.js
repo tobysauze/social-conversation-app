@@ -20,7 +20,16 @@ import {
   RefreshCw,
   Search,
   Pin,
-  PinOff
+  PinOff,
+  Upload,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  MessagesSquare,
+  Check,
+  RotateCcw,
+  SmilePlus
 } from 'lucide-react';
 import { peopleAPI, jokesAPI, chatAPI } from '../services/api';
 import { format } from 'date-fns';
@@ -67,6 +76,29 @@ const PersonDetail = () => {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [textUploads, setTextUploads] = useState([]);
+  const [loadingTexts, setLoadingTexts] = useState(false);
+  const [showTextForm, setShowTextForm] = useState(false);
+  const [textFormLabel, setTextFormLabel] = useState('');
+  const [textFormContent, setTextFormContent] = useState('');
+  const [savingText, setSavingText] = useState(false);
+  const [expandedTextId, setExpandedTextId] = useState(null);
+  const [expandedTextContent, setExpandedTextContent] = useState('');
+  const [loadingTextContent, setLoadingTextContent] = useState(false);
+  const [topics, setTopics] = useState([]);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  const [newTopicText, setNewTopicText] = useState('');
+  const [savingTopic, setSavingTopic] = useState(false);
+  const [editingTopicId, setEditingTopicId] = useState(null);
+  const [editingTopicText, setEditingTopicText] = useState('');
+  const [insideJokes, setInsideJokes] = useState([]);
+  const [loadingInsideJokes, setLoadingInsideJokes] = useState(false);
+  const [newInsideJoke, setNewInsideJoke] = useState('');
+  const [newInsideJokeContext, setNewInsideJokeContext] = useState('');
+  const [savingInsideJoke, setSavingInsideJoke] = useState(false);
+  const [editingInsideJokeId, setEditingInsideJokeId] = useState(null);
+  const [editingInsideJokeText, setEditingInsideJokeText] = useState('');
+  const [editingInsideJokeContext, setEditingInsideJokeContext] = useState('');
 
   const coerceToArray = (value) => {
     if (Array.isArray(value)) {
@@ -192,11 +224,207 @@ const PersonDetail = () => {
     }
   };
 
+  const loadTextUploads = async () => {
+    setLoadingTexts(true);
+    try {
+      const res = await peopleAPI.listTextUploads(id);
+      setTextUploads(res.data.uploads || []);
+    } catch (error) {
+      console.error('Error loading text uploads:', error);
+    } finally {
+      setLoadingTexts(false);
+    }
+  };
+
+  const handleSaveTextUpload = async () => {
+    if (!textFormLabel.trim() || !textFormContent.trim()) {
+      toast.error('Please provide a label and paste some messages');
+      return;
+    }
+    setSavingText(true);
+    try {
+      await peopleAPI.createTextUpload(id, {
+        label: textFormLabel.trim(),
+        content: textFormContent.trim()
+      });
+      setTextFormLabel('');
+      setTextFormContent('');
+      setShowTextForm(false);
+      await loadTextUploads();
+      toast.success('Text messages saved');
+    } catch (error) {
+      console.error('Error saving text upload:', error);
+      toast.error('Failed to save text messages');
+    } finally {
+      setSavingText(false);
+    }
+  };
+
+  const handleDeleteTextUpload = async (textId) => {
+    if (!window.confirm('Delete this text upload?')) return;
+    try {
+      await peopleAPI.deleteTextUpload(id, textId);
+      if (expandedTextId === textId) {
+        setExpandedTextId(null);
+        setExpandedTextContent('');
+      }
+      await loadTextUploads();
+      toast.success('Text upload deleted');
+    } catch (error) {
+      console.error('Error deleting text upload:', error);
+      toast.error('Failed to delete text upload');
+    }
+  };
+
+  const toggleExpandText = async (textId) => {
+    if (expandedTextId === textId) {
+      setExpandedTextId(null);
+      setExpandedTextContent('');
+      return;
+    }
+    setExpandedTextId(textId);
+    setLoadingTextContent(true);
+    try {
+      const res = await peopleAPI.getTextUpload(id, textId);
+      setExpandedTextContent(res.data.upload.content || '');
+    } catch (error) {
+      console.error('Error loading text content:', error);
+      toast.error('Failed to load text content');
+    } finally {
+      setLoadingTextContent(false);
+    }
+  };
+
+  const loadTopics = async () => {
+    setLoadingTopics(true);
+    try {
+      const res = await peopleAPI.listTopics(id);
+      setTopics(res.data.topics || []);
+    } catch (error) {
+      console.error('Error loading topics:', error);
+    } finally {
+      setLoadingTopics(false);
+    }
+  };
+
+  const handleAddTopic = async () => {
+    const text = newTopicText.trim();
+    if (!text) return;
+    setSavingTopic(true);
+    try {
+      await peopleAPI.createTopic(id, text);
+      setNewTopicText('');
+      await loadTopics();
+    } catch (error) {
+      console.error('Error adding topic:', error);
+      toast.error('Failed to add topic');
+    } finally {
+      setSavingTopic(false);
+    }
+  };
+
+  const handleToggleTopicUsed = async (topic) => {
+    try {
+      await peopleAPI.updateTopic(id, topic.id, { used: !topic.used });
+      await loadTopics();
+    } catch (error) {
+      console.error('Error updating topic:', error);
+      toast.error('Failed to update topic');
+    }
+  };
+
+  const handleSaveTopicEdit = async (topicId) => {
+    const text = editingTopicText.trim();
+    if (!text) return;
+    try {
+      await peopleAPI.updateTopic(id, topicId, { topic: text });
+      setEditingTopicId(null);
+      setEditingTopicText('');
+      await loadTopics();
+    } catch (error) {
+      console.error('Error editing topic:', error);
+      toast.error('Failed to edit topic');
+    }
+  };
+
+  const handleDeleteTopic = async (topicId) => {
+    try {
+      await peopleAPI.deleteTopic(id, topicId);
+      await loadTopics();
+    } catch (error) {
+      console.error('Error deleting topic:', error);
+      toast.error('Failed to delete topic');
+    }
+  };
+
+  const loadInsideJokes = async () => {
+    setLoadingInsideJokes(true);
+    try {
+      const res = await peopleAPI.listInsideJokes(id);
+      setInsideJokes(res.data.jokes || []);
+    } catch (error) {
+      console.error('Error loading inside jokes:', error);
+    } finally {
+      setLoadingInsideJokes(false);
+    }
+  };
+
+  const handleAddInsideJoke = async () => {
+    const text = newInsideJoke.trim();
+    if (!text) return;
+    setSavingInsideJoke(true);
+    try {
+      await peopleAPI.createInsideJoke(id, {
+        joke: text,
+        context: newInsideJokeContext.trim() || undefined
+      });
+      setNewInsideJoke('');
+      setNewInsideJokeContext('');
+      await loadInsideJokes();
+    } catch (error) {
+      console.error('Error adding inside joke:', error);
+      toast.error('Failed to add inside joke');
+    } finally {
+      setSavingInsideJoke(false);
+    }
+  };
+
+  const handleSaveInsideJokeEdit = async (jokeId) => {
+    const text = editingInsideJokeText.trim();
+    if (!text) return;
+    try {
+      await peopleAPI.updateInsideJoke(id, jokeId, {
+        joke: text,
+        context: editingInsideJokeContext.trim() || null
+      });
+      setEditingInsideJokeId(null);
+      setEditingInsideJokeText('');
+      setEditingInsideJokeContext('');
+      await loadInsideJokes();
+    } catch (error) {
+      console.error('Error editing inside joke:', error);
+      toast.error('Failed to edit inside joke');
+    }
+  };
+
+  const handleDeleteInsideJoke = async (jokeId) => {
+    try {
+      await peopleAPI.deleteInsideJoke(id, jokeId);
+      await loadInsideJokes();
+    } catch (error) {
+      console.error('Error deleting inside joke:', error);
+      toast.error('Failed to delete inside joke');
+    }
+  };
+
   useEffect(() => {
     loadPerson();
     loadJokes();
     loadPersonChats();
     loadPinnedMessages();
+    loadTextUploads();
+    loadTopics();
+    loadInsideJokes();
     (async () => {
       try {
         const v = await chatAPI.version();
@@ -850,6 +1078,268 @@ const PersonDetail = () => {
               )}
             </div>
 
+            {/* Possible Conversational Topics */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <MessagesSquare className="w-5 h-5 mr-2" />
+                Possible Conversational Topics
+              </h2>
+
+              <div className="flex items-center gap-2 mb-4">
+                <input
+                  type="text"
+                  placeholder="Add a topic idea..."
+                  value={newTopicText}
+                  onChange={(e) => setNewTopicText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddTopic();
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <button
+                  onClick={handleAddTopic}
+                  disabled={savingTopic || !newTopicText.trim()}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+
+              {loadingTopics ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                </div>
+              ) : topics.length === 0 ? (
+                <div className="text-center py-6">
+                  <MessagesSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">
+                    No conversation topics yet. Add ideas for things to talk about with {person.name}.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {topics.map((t) => (
+                    <li
+                      key={t.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                        t.used
+                          ? 'bg-gray-50 border-gray-200'
+                          : 'bg-white border-gray-200 hover:border-primary-200'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTopicUsed(t)}
+                        className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          t.used
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-gray-300 hover:border-primary-400'
+                        }`}
+                        title={t.used ? 'Mark as unused' : 'Mark as used'}
+                      >
+                        {t.used && <Check className="w-3 h-3" />}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        {editingTopicId === t.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingTopicText}
+                              onChange={(e) => setEditingTopicText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveTopicEdit(t.id);
+                                if (e.key === 'Escape') { setEditingTopicId(null); setEditingTopicText(''); }
+                              }}
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleSaveTopicEdit(t.id)}
+                              className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => { setEditingTopicId(null); setEditingTopicText(''); }}
+                              className="text-gray-400 hover:text-gray-600 text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <span className={`text-sm ${t.used ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            {t.topic}
+                          </span>
+                        )}
+                      </div>
+
+                      {editingTopicId !== t.id && (
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {t.used && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTopicUsed(t)}
+                              className="p-1 text-gray-400 hover:text-primary-600 rounded transition-colors"
+                              title="Bring back"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setEditingTopicId(t.id); setEditingTopicText(t.topic); }}
+                            className="p-1 text-gray-400 hover:text-primary-600 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTopic(t.id)}
+                            className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Inside Jokes */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <SmilePlus className="w-5 h-5 mr-2" />
+                Inside Jokes with {person.name}
+              </h2>
+
+              <div className="space-y-2 mb-4">
+                <input
+                  type="text"
+                  placeholder="The joke or reference..."
+                  value={newInsideJoke}
+                  onChange={(e) => setNewInsideJoke(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) handleAddInsideJoke();
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Context / backstory (optional)"
+                    value={newInsideJokeContext}
+                    onChange={(e) => setNewInsideJokeContext(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddInsideJoke();
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  />
+                  <button
+                    onClick={handleAddInsideJoke}
+                    disabled={savingInsideJoke || !newInsideJoke.trim()}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {loadingInsideJokes ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                </div>
+              ) : insideJokes.length === 0 ? (
+                <div className="text-center py-6">
+                  <SmilePlus className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">
+                    No inside jokes yet. Add the ones you share with {person.name} so you never forget them.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {insideJokes.map((j) => (
+                    <li
+                      key={j.id}
+                      className="p-3 rounded-lg border border-gray-200 hover:border-primary-200 transition-colors"
+                    >
+                      {editingInsideJokeId === j.id ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editingInsideJokeText}
+                            onChange={(e) => setEditingInsideJokeText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveInsideJokeEdit(j.id);
+                              if (e.key === 'Escape') { setEditingInsideJokeId(null); setEditingInsideJokeText(''); setEditingInsideJokeContext(''); }
+                            }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                            autoFocus
+                          />
+                          <input
+                            type="text"
+                            value={editingInsideJokeContext}
+                            onChange={(e) => setEditingInsideJokeContext(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveInsideJokeEdit(j.id);
+                              if (e.key === 'Escape') { setEditingInsideJokeId(null); setEditingInsideJokeText(''); setEditingInsideJokeContext(''); }
+                            }}
+                            placeholder="Context (optional)"
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-xs"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSaveInsideJokeEdit(j.id)}
+                              className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => { setEditingInsideJokeId(null); setEditingInsideJokeText(''); setEditingInsideJokeContext(''); }}
+                              className="text-gray-400 hover:text-gray-600 text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-900">{j.joke}</p>
+                            {j.context && (
+                              <p className="text-xs text-gray-500 mt-1 italic">{j.context}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => { setEditingInsideJokeId(j.id); setEditingInsideJokeText(j.joke); setEditingInsideJokeContext(j.context || ''); }}
+                              className="p-1 text-gray-400 hover:text-primary-600 rounded transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteInsideJoke(j.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             {/* Notes */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -891,6 +1381,162 @@ const PersonDetail = () => {
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Appends a timestamped note to this profile.</p>
               </div>
+            </div>
+
+            {/* Past Text Messages */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  Past Text Messages
+                </h2>
+                <button
+                  onClick={() => setShowTextForm((v) => !v)}
+                  className="btn-secondary text-sm flex items-center"
+                >
+                  {showTextForm ? (
+                    <>
+                      <X className="w-4 h-4 mr-1" />
+                      Cancel
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-1" />
+                      Upload Messages
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-500 mb-4">
+                Paste text conversations you've had with {person.name}. The AI chat will use these as context to understand how you two communicate.
+              </p>
+
+              {showTextForm && (
+                <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. WhatsApp chat Feb 2026, iMessage last week..."
+                        value={textFormLabel}
+                        onChange={(e) => setTextFormLabel(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Messages</label>
+                      <textarea
+                        rows={8}
+                        placeholder={"Paste your text conversation here...\n\nYou: Hey, what are you up to?\nThem: Not much, just chilling\nYou: Want to grab coffee?"}
+                        value={textFormContent}
+                        onChange={(e) => setTextFormContent(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-500">
+                        {textFormContent.length > 0
+                          ? `${textFormContent.length.toLocaleString()} characters`
+                          : 'Copy-paste from your messaging app'}
+                      </p>
+                      <button
+                        onClick={handleSaveTextUpload}
+                        disabled={savingText || !textFormLabel.trim() || !textFormContent.trim()}
+                        className="btn-primary text-sm flex items-center"
+                      >
+                        {savingText ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-1" />
+                            Save Messages
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {loadingTexts ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                </div>
+              ) : textUploads.length === 0 && !showTextForm ? (
+                <div className="text-center py-6">
+                  <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">
+                    No text messages uploaded yet
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {textUploads.map((upload) => (
+                    <div
+                      key={upload.id}
+                      className="border border-gray-200 rounded-lg overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                        <button
+                          type="button"
+                          className="flex items-center flex-1 min-w-0 text-left"
+                          onClick={() => toggleExpandText(upload.id)}
+                        >
+                          {expandedTextId === upload.id ? (
+                            <ChevronUp className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {upload.label}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {formatDateSafe(upload.createdAt)}
+                            </div>
+                          </div>
+                        </button>
+                        <div className="flex items-center space-x-2 ml-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpandText(upload.id)}
+                            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                            title="Preview"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTextUpload(upload.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {expandedTextId === upload.id && (
+                        <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
+                          {loadingTextContent ? (
+                            <div className="flex justify-center py-3">
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
+                            </div>
+                          ) : (
+                            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono max-h-64 overflow-auto">
+                              {expandedTextContent}
+                            </pre>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Jokes Section */}
