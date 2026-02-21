@@ -21,6 +21,46 @@ function parseJsonArrayOrWrap(value) {
   return [];
 }
 
+let peopleFeatureTablesEnsured = false;
+async function ensurePeopleFeatureTables() {
+  if (peopleFeatureTablesEnsured || !prisma) return;
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "person_text_uploads" (
+      "id" SERIAL PRIMARY KEY,
+      "person_id" INTEGER NOT NULL,
+      "label" TEXT NOT NULL,
+      "content" TEXT NOT NULL,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "person_conversation_topics" (
+      "id" SERIAL PRIMARY KEY,
+      "person_id" INTEGER NOT NULL,
+      "topic" TEXT NOT NULL,
+      "used" BOOLEAN NOT NULL DEFAULT false,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "person_inside_jokes" (
+      "id" SERIAL PRIMARY KEY,
+      "person_id" INTEGER NOT NULL,
+      "joke" TEXT NOT NULL,
+      "context" TEXT,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  peopleFeatureTablesEnsured = true;
+}
+
 // Get all people for a user
 router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
@@ -337,6 +377,7 @@ router.post('/:id/apply-insights', authenticateToken, async (req, res) => {
 // List text uploads for a person
 router.get('/:id/texts', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -357,6 +398,7 @@ router.get('/:id/texts', authenticateToken, async (req, res) => {
 // Get a single text upload (with content)
 router.get('/:id/texts/:textId', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -382,6 +424,7 @@ router.post('/:id/texts', authenticateToken, async (req, res) => {
   }
 
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -402,6 +445,7 @@ router.put('/:id/texts/:textId', authenticateToken, async (req, res) => {
   const { label, content } = req.body;
 
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -429,6 +473,7 @@ router.put('/:id/texts/:textId', authenticateToken, async (req, res) => {
 // Delete a text upload
 router.delete('/:id/texts/:textId', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -453,6 +498,7 @@ router.delete('/:id/texts/:textId', authenticateToken, async (req, res) => {
 // List topics for a person
 router.get('/:id/topics', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -477,6 +523,7 @@ router.post('/:id/topics', authenticateToken, async (req, res) => {
   }
 
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -495,6 +542,7 @@ router.post('/:id/topics', authenticateToken, async (req, res) => {
 // Update a topic (edit text or toggle used)
 router.patch('/:id/topics/:topicId', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -523,6 +571,7 @@ router.patch('/:id/topics/:topicId', authenticateToken, async (req, res) => {
 // Delete a topic
 router.delete('/:id/topics/:topicId', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -545,6 +594,7 @@ router.delete('/:id/topics/:topicId', authenticateToken, async (req, res) => {
 
 router.get('/:id/inside-jokes', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -568,6 +618,7 @@ router.post('/:id/inside-jokes', authenticateToken, async (req, res) => {
   }
 
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -589,6 +640,7 @@ router.post('/:id/inside-jokes', authenticateToken, async (req, res) => {
 
 router.patch('/:id/inside-jokes/:jokeId', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
@@ -616,6 +668,7 @@ router.patch('/:id/inside-jokes/:jokeId', authenticateToken, async (req, res) =>
 
 router.delete('/:id/inside-jokes/:jokeId', authenticateToken, async (req, res) => {
   try {
+    await ensurePeopleFeatureTables();
     const person = await prisma.person.findFirst({
       where: { id: Number(req.params.id), userId: req.user.userId }
     });
