@@ -16,6 +16,7 @@ model User {
   updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at")
 
   journalEntries JournalEntry[]
+  dreamEntries   DreamEntry[]
   stories        Story[]
   people         Person[]
   jokes          Joke[]
@@ -33,6 +34,21 @@ model JournalEntry {
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at")
   user      User      @relation(fields: [userId], references: [id])
   stories   Story[]
+}
+
+model DreamEntry {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  content      String
+  title        String?   // optional short title e.g. "Flying over mountains"
+  sleepQuality String?   @map("sleep_quality") // rested, restless, vivid, etc.
+  tags         String?
+  analysis     String?   // stored AI analysis JSON
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id])
+
+  @@map("dream_entries")
 }
 
 model Story {

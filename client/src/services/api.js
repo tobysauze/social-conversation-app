@@ -50,6 +50,16 @@ export const authAPI = {
     api.post('/auth/change-password', { currentPassword, newPassword }),
 };
 
+// Dreams API (Dream Diary)
+export const dreamsAPI = {
+  getEntries: (page = 1, limit = 20) => api.get(`/dreams?page=${page}&limit=${limit}`),
+  getEntry: (id) => api.get(`/dreams/${id}`),
+  createEntry: (data) => api.post('/dreams', data),
+  updateEntry: (id, data) => api.put(`/dreams/${id}`, data),
+  deleteEntry: (id) => api.delete(`/dreams/${id}`),
+  analyze: (id) => api.post(`/dreams/${id}/analyze`),
+};
+
 // Journal API
 export const journalAPI = {
   getEntries: (page = 1, limit = 20) => api.get(`/journal?page=${page}&limit=${limit}`),

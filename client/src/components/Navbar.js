@@ -21,7 +21,8 @@ import {
   MoreHorizontal,
   ChevronDown,
   ClipboardList,
-  HeartHandshake
+  HeartHandshake,
+  Moon
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -34,6 +35,7 @@ const Navbar = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Journal', href: '/journal', icon: BookOpen },
+    { name: 'Dream Diary', href: '/dreams', icon: Moon },
     { name: 'Stories', href: '/stories', icon: MessageSquare },
     { name: 'Practice', href: '/practice', icon: Play },
     { name: 'People', href: '/people', icon: Users },
@@ -51,12 +53,12 @@ const Navbar = () => {
   ];
 
   const primaryNav = useMemo(() => {
-    const primary = new Set(['Home', 'Journal', 'Stories', 'Practice', 'People', 'AI Chat']);
+    const primary = new Set(['Home', 'Journal', 'Dream Diary', 'Stories', 'Practice', 'People', 'AI Chat']);
     return navigation.filter((i) => primary.has(i.name));
   }, [navigation]);
 
   const moreNav = useMemo(() => {
-    const primary = new Set(['Home', 'Journal', 'Stories', 'Practice', 'People', 'AI Chat']);
+    const primary = new Set(['Home', 'Journal', 'Dream Diary', 'Stories', 'Practice', 'People', 'AI Chat']);
     return navigation.filter((i) => !primary.has(i.name));
   }, [navigation]);
 

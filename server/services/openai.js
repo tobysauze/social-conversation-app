@@ -746,6 +746,68 @@ ${journalContent}
   }
 };
 
+// Analyze a dream for possible meanings, symbols, and themes
+const analyzeDream = async (dreamContent) => {
+  try {
+    const prompt = `You are a thoughtful dream interpretation assistant. You draw on common symbolism, psychology, and cultural meanings while being clear that dream interpretation is subjective and personal.
+
+Analyze this dream and provide possible insights. Be supportive and exploratory, not prescriptive. Frame interpretations as "possible meanings" rather than definitive answers.
+
+Dream:
+"""
+${dreamContent}
+"""
+
+Return STRICT JSON with this schema:
+{
+  "summary": "A brief 1-2 sentence overview of the dream's possible themes",
+  "symbols": [
+    {
+      "symbol": "The symbol or element from the dream",
+      "possible_meanings": ["meaning 1", "meaning 2"],
+      "context_note": "How it might relate to this specific dream"
+    }
+  ],
+  "themes": ["theme 1", "theme 2", "theme 3"],
+  "emotional_tone": "Description of the emotional quality of the dream",
+  "possible_interpretations": [
+    {
+      "angle": "Short label for this interpretation angle",
+      "interpretation": "2-4 sentences exploring this possible meaning"
+    }
+  ],
+  "questions_to_reflect": ["Question 1?", "Question 2?"]
+}
+
+Guidelines:
+- Keep interpretations thoughtful but accessible
+- Avoid medical or diagnostic claims
+- Include 2-5 symbols, 2-4 themes, 2-4 interpretation angles
+- Questions should help the dreamer reflect, not lead them to a specific conclusion
+`;
+
+    const response = await openai.chat.completions.create({
+      model: getModel(),
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.6,
+      max_tokens: 1500
+    });
+
+    const content = response.choices[0].message.content;
+    return safeParseJson(content, {
+      summary: '',
+      symbols: [],
+      themes: [],
+      emotional_tone: '',
+      possible_interpretations: [],
+      questions_to_reflect: []
+    });
+  } catch (error) {
+    console.error('Error analyzing dream:', error);
+    throw new Error('Failed to analyze dream');
+  }
+};
+
 // Generate an identity vision statement from bullet points
 const generateIdentityVision = async (visionPoints = []) => {
   const listText = (visionPoints || []).map((p, i) => `${i + 1}. ${p}`).join('\n');
@@ -776,6 +838,7 @@ module.exports = {
   getStoryRecommendations,
   analyzeJournalForPeopleInsights,
   analyzeJournalForPersonalInsights,
+  analyzeDream,
   generateJoke,
   iterateJoke,
   categorizeJoke,

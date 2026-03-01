@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Journal from './pages/Journal';
+import DreamDiary from './pages/DreamDiary';
 import Stories from './pages/Stories';
 import Practice from './pages/Practice';
 import Profile from './pages/Profile';
@@ -90,7 +91,15 @@ function AppContent() {
               <ProtectedRoute>
                 <Journal />
               </ProtectedRoute>
-            } 
+            }
+          />
+          <Route 
+            path="/dreams" 
+            element={
+              <ProtectedRoute>
+                <DreamDiary />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/stories" 
