@@ -264,23 +264,10 @@ router.post('/:jokeId/iterate', authenticateToken, async (req, res) => {
   const { conversationHistory = [] } = req.body;
 
   try {
-    // Get the joke (Prisma first, fallback to SQLite)
-    let joke = null;
-    try {
-      joke = await prisma.joke.findFirst({
-        where: { id: Number(jokeId), userId: req.user.userId },
-        select: { title: true, content: true, category: true, difficulty: true }
-      });
-    } catch (e) {
-      // ignore, fall back below
-    }
-
-    if (!joke) {
-      const db = getDatabase();
-      joke = db
-        .prepare('SELECT title, content, category, difficulty FROM jokes WHERE id = ? AND user_id = ?')
-        .get(Number(jokeId), req.user.userId);
-    }
+    const joke = await prisma.joke.findFirst({
+      where: { id: Number(jokeId), userId: req.user.userId },
+      select: { title: true, content: true, category: true, difficulty: true }
+    });
 
     if (!joke) {
       return res.status(404).json({ error: 'Joke not found' });

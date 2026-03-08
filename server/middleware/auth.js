@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { getDatabase } = require('../database/init');
+const { prisma } = require('../prisma/client');
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -18,18 +18,18 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const getUserById = (userId) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const db = getDatabase();
-      const row = db
-        .prepare('SELECT id, email, name, created_at FROM users WHERE id = ?')
-        .get(userId);
-      resolve(row || null);
-    } catch (err) {
-      reject(err);
-    }
+const getUserById = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: Number(userId) },
+    select: { id: true, email: true, name: true, createdAt: true }
   });
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    created_at: user.createdAt
+  };
 };
 
 module.exports = { authenticateToken, getUserById };
