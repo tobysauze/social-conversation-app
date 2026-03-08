@@ -74,7 +74,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 
     const { title, category, intensity, notes } = req.body || {};
 
-    const t = (title ?? existing.title || '').toString().trim();
+    const t = ((title ?? existing.title) || '').toString().trim();
     if (!t) return res.status(400).json({ error: 'title is required' });
 
     const intVal = intensity === null || intensity === undefined || intensity === '' ? null : Number(intensity);
