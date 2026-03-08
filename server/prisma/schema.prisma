@@ -17,9 +17,16 @@ model User {
 
   journalEntries JournalEntry[]
   dreamEntries   DreamEntry[]
-  stories        Story[]
-  people         Person[]
-  jokes          Joke[]
+  anxietyTriggers AnxietyTrigger[]
+  beliefs         Belief[]
+  goals           Goal[]
+  protocols       Protocol[]
+  identityVision  IdentityVision?
+  datingProfile   DatingProfile?
+  genomeUploads   GenomeUpload[]
+  stories         Story[]
+  people          Person[]
+  jokes           Joke[]
   practiceSessions     PracticeSession[]
   conversationStarters ConversationStarter[]
 }
@@ -49,6 +56,101 @@ model DreamEntry {
   user         User      @relation(fields: [userId], references: [id])
 
   @@map("dream_entries")
+}
+
+model AnxietyTrigger {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String
+  category  String?
+  intensity Int?     // 1-10
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("anxiety_triggers")
+}
+
+model Belief {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  currentBelief String   @map("current_belief")
+  desiredBelief String   @map("desired_belief")
+  changePlan    String?  @map("change_plan")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@map("beliefs")
+}
+
+model Goal {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  title       String
+  description String?
+  area        String?
+  targetDate  DateTime? @map("target_date") @db.Date
+  status      String    @default("active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@map("goals")
+}
+
+model Protocol {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String
+  whenToUse String?  @map("when_to_use")
+  steps     String?  // JSON array
+  cadence   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("protocols")
+}
+
+model IdentityVision {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique @map("user_id")
+  vision       String?
+  values       String?  // JSON array
+  principles   String?  // JSON array
+  traits       String?  // JSON array
+  visionPoints String?  @map("vision_points") // JSON array
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("identity_visions")
+}
+
+model DatingProfile {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique @map("user_id")
+  shortTermRequirements String?  @map("short_term_requirements") // JSON
+  longTermRequirements  String?  @map("long_term_requirements") // JSON
+  selfReflectionAnswers String?  @map("self_reflection_answers") // JSON
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+  user                  User     @relation(fields: [userId], references: [id])
+
+  @@map("dating_profiles")
+}
+
+model GenomeUpload {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  originalName String   @map("original_name")
+  storedName   String   @map("stored_name")
+  mimeType     String?  @map("mime_type")
+  sizeBytes    Int?     @map("size_bytes")
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@map("genome_uploads")
 }
 
 model Story {

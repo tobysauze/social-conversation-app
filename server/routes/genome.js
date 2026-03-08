@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { authenticateToken } = require('../middleware/auth');
-const { getDatabase, ensureSqliteUser } = require('../database/init');
+const { prisma } = require('../prisma/client');
 
 const router = express.Router();
 
@@ -12,7 +12,6 @@ function ensureDir(dir) {
 }
 
 function getUploadDir() {
-  // Prefer persistent disk if available (Render mounts /data)
   const base = process.env.UPLOAD_DIR || process.env.DATABASE_DIR || (process.env.RENDER ? '/data' : null);
   const dir = base ? path.join(base, 'genome_uploads') : path.join(__dirname, '..', 'uploads', 'genome');
   ensureDir(dir);
@@ -40,85 +39,76 @@ const upload = multer({
   }
 });
 
-// List uploads
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
-    const rows = db.prepare(
-      `SELECT id, original_name, mime_type, size_bytes, created_at
-       FROM genome_uploads
-       WHERE user_id = ?
-       ORDER BY created_at DESC`
-    ).all(req.user.userId);
-    return res.json({ uploads: rows });
+    const uploads = await prisma.genomeUpload.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true }
+    });
+    const legacy = uploads.map((u) => ({
+      id: u.id,
+      original_name: u.originalName,
+      mime_type: u.mimeType,
+      size_bytes: u.sizeBytes,
+      created_at: u.createdAt
+    }));
+    return res.json({ uploads: legacy });
   } catch (e) {
     console.error('Genome list error:', e);
     return res.status(500).json({ error: 'Database error' });
   }
 });
 
-// Upload a file
-router.post('/upload', authenticateToken, upload.single('file'), (req, res) => {
+router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file is required' });
-    const db = getDatabase();
-    ensureSqliteUser({ id: req.user.userId, email: req.user.email, name: req.user.email });
-    const info = db.prepare(
-      `INSERT INTO genome_uploads (user_id, original_name, stored_name, mime_type, size_bytes)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(
-      req.user.userId,
-      req.file.originalname,
-      req.file.filename,
-      req.file.mimetype || null,
-      req.file.size || null
-    );
-    return res.status(201).json({ id: info.lastInsertRowid });
+    const uploadRecord = await prisma.genomeUpload.create({
+      data: {
+        userId: req.user.userId,
+        originalName: req.file.originalname,
+        storedName: req.file.filename,
+        mimeType: req.file.mimetype || null,
+        sizeBytes: req.file.size || null
+      }
+    });
+    return res.status(201).json({ id: uploadRecord.id });
   } catch (e) {
     console.error('Genome upload error:', e);
     return res.status(500).json({ error: 'Upload failed' });
   }
 });
 
-// Download a file
-router.get('/:id/download', authenticateToken, (req, res) => {
+router.get('/:id/download', authenticateToken, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const db = getDatabase();
-    const row = db.prepare(
-      `SELECT id, original_name, stored_name
-       FROM genome_uploads
-       WHERE id = ? AND user_id = ?`
-    ).get(id, req.user.userId);
+    const row = await prisma.genomeUpload.findFirst({
+      where: { id, userId: req.user.userId }
+    });
     if (!row) return res.status(404).json({ error: 'Not found' });
 
-    const fullPath = path.join(getUploadDir(), row.stored_name);
+    const fullPath = path.join(getUploadDir(), row.storedName);
     if (!fs.existsSync(fullPath)) return res.status(404).json({ error: 'File missing on server' });
 
-    return res.download(fullPath, row.original_name);
+    return res.download(fullPath, row.originalName);
   } catch (e) {
     console.error('Genome download error:', e);
     return res.status(500).json({ error: 'Download failed' });
   }
 });
 
-// Delete a file
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const db = getDatabase();
-    const row = db.prepare(
-      `SELECT stored_name
-       FROM genome_uploads
-       WHERE id = ? AND user_id = ?`
-    ).get(id, req.user.userId);
+    const row = await prisma.genomeUpload.findFirst({
+      where: { id, userId: req.user.userId }
+    });
     if (!row) return res.status(404).json({ error: 'Not found' });
 
-    db.prepare(`DELETE FROM genome_uploads WHERE id = ? AND user_id = ?`).run(id, req.user.userId);
+    await prisma.genomeUpload.delete({ where: { id } });
 
-    // best-effort delete file
     try {
-      const fullPath = path.join(getUploadDir(), row.stored_name);
+      const fullPath = path.join(getUploadDir(), row.storedName);
       if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
     } catch (_) {}
 
@@ -130,4 +120,3 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 module.exports = router;
-

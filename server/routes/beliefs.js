@@ -1,36 +1,32 @@
 const express = require('express');
+const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
-const { getDatabase, ensureSqliteUser } = require('../database/init');
 
 const router = express.Router();
-const nowSql = () => "DATETIME('now')";
 
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
-    const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
-
-    const rows = db.prepare(
-      `SELECT *
-       FROM beliefs
-       WHERE user_id = ?
-       ORDER BY updated_at DESC, id DESC`
-    ).all(uid);
-
-    return res.json({ beliefs: rows });
+    const beliefs = await prisma.belief.findMany({
+      where: { userId: req.user.userId },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }]
+    });
+    const legacy = beliefs.map((b) => ({
+      id: b.id,
+      current_belief: b.currentBelief,
+      desired_belief: b.desiredBelief,
+      change_plan: b.changePlan,
+      created_at: b.createdAt,
+      updated_at: b.updatedAt
+    }));
+    return res.json({ beliefs: legacy });
   } catch (e) {
     console.error('Beliefs list error:', e);
     return res.status(500).json({ error: 'Database error' });
   }
 });
 
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
-    const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
-
     const current_belief = (req.body?.current_belief || '').toString().trim();
     const desired_belief = (req.body?.desired_belief || '').toString().trim();
     const change_plan = (req.body?.change_plan || '').toString().trim();
@@ -38,59 +34,77 @@ router.post('/', authenticateToken, (req, res) => {
     if (!current_belief) return res.status(400).json({ error: 'current_belief is required' });
     if (!desired_belief) return res.status(400).json({ error: 'desired_belief is required' });
 
-    const info = db.prepare(
-      `INSERT INTO beliefs (user_id, current_belief, desired_belief, change_plan, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ${nowSql()}, ${nowSql()})`
-    ).run(uid, current_belief, desired_belief, change_plan || null);
-
-    const row = db.prepare('SELECT * FROM beliefs WHERE id = ? AND user_id = ?').get(info.lastInsertRowid, uid);
-    return res.status(201).json({ belief: row });
+    const belief = await prisma.belief.create({
+      data: {
+        userId: req.user.userId,
+        currentBelief: current_belief,
+        desiredBelief: desired_belief,
+        changePlan: change_plan || null
+      }
+    });
+    return res.status(201).json({
+      belief: {
+        id: belief.id,
+        current_belief: belief.currentBelief,
+        desired_belief: belief.desiredBelief,
+        change_plan: belief.changePlan,
+        created_at: belief.createdAt,
+        updated_at: belief.updatedAt
+      }
+    });
   } catch (e) {
     console.error('Beliefs create error:', e);
     return res.status(500).json({ error: 'Failed to create belief' });
   }
 });
 
-router.patch('/:id', authenticateToken, (req, res) => {
+router.patch('/:id', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
-    const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
-
     const id = Number(req.params.id);
-    const existing = db.prepare('SELECT * FROM beliefs WHERE id = ? AND user_id = ?').get(id, uid);
+    const existing = await prisma.belief.findFirst({
+      where: { id, userId: req.user.userId }
+    });
     if (!existing) return res.status(404).json({ error: 'Belief not found' });
 
-    const current_belief = (req.body?.current_belief ?? existing.current_belief).toString().trim();
-    const desired_belief = (req.body?.desired_belief ?? existing.desired_belief).toString().trim();
-    const change_plan = (req.body?.change_plan ?? existing.change_plan ?? '').toString().trim();
+    const current_belief = (req.body?.current_belief ?? existing.currentBelief).toString().trim();
+    const desired_belief = (req.body?.desired_belief ?? existing.desiredBelief).toString().trim();
+    const change_plan = (req.body?.change_plan ?? existing.changePlan ?? '').toString().trim();
 
     if (!current_belief) return res.status(400).json({ error: 'current_belief is required' });
     if (!desired_belief) return res.status(400).json({ error: 'desired_belief is required' });
 
-    db.prepare(
-      `UPDATE beliefs
-       SET current_belief = ?, desired_belief = ?, change_plan = ?, updated_at = ${nowSql()}
-       WHERE id = ? AND user_id = ?`
-    ).run(current_belief, desired_belief, change_plan || null, id, uid);
-
-    const row = db.prepare('SELECT * FROM beliefs WHERE id = ? AND user_id = ?').get(id, uid);
-    return res.json({ belief: row });
+    const belief = await prisma.belief.update({
+      where: { id },
+      data: {
+        currentBelief: current_belief,
+        desiredBelief: desired_belief,
+        changePlan: change_plan || null
+      }
+    });
+    return res.json({
+      belief: {
+        id: belief.id,
+        current_belief: belief.currentBelief,
+        desired_belief: belief.desiredBelief,
+        change_plan: belief.changePlan,
+        created_at: belief.createdAt,
+        updated_at: belief.updatedAt
+      }
+    });
   } catch (e) {
     console.error('Beliefs update error:', e);
+    if (e.code === 'P2025') return res.status(404).json({ error: 'Belief not found' });
     return res.status(500).json({ error: 'Failed to update belief' });
   }
 });
 
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
-    const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
-
     const id = Number(req.params.id);
-    const info = db.prepare('DELETE FROM beliefs WHERE id = ? AND user_id = ?').run(id, uid);
-    if (!info.changes) return res.status(404).json({ error: 'Belief not found' });
+    const result = await prisma.belief.deleteMany({
+      where: { id, userId: req.user.userId }
+    });
+    if (result.count === 0) return res.status(404).json({ error: 'Belief not found' });
     return res.json({ status: 'deleted' });
   } catch (e) {
     console.error('Beliefs delete error:', e);
@@ -99,4 +113,3 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 module.exports = router;
-
