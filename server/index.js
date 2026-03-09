@@ -142,6 +142,11 @@ app.get('/api/health', async (req, res) => {
         }
       }
       result.database = { status: 'connected', users: userCount, tables };
+
+      const appliedMigrations = await p.$queryRawUnsafe(
+        `SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 10`
+      ).catch(() => []);
+      result.database.migrations = appliedMigrations.map(m => m.migration_name);
     }
   } catch (e) {
     result.database = { status: 'error', error: e.message };
