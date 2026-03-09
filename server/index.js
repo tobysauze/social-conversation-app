@@ -129,9 +129,19 @@ app.get('/api/health', async (req, res) => {
     if (!p) {
       result.database = { status: 'error', error: 'Prisma client is null' };
     } else {
-      const dbResult = await p.$queryRaw`SELECT 1 as ok`;
       const userCount = await p.user.count();
-      result.database = { status: 'connected', users: userCount };
+      const tables = {};
+      const tableNames = ['dream_entries', 'anxiety_triggers', 'beliefs', 'goals', 'protocols',
+        'identity_visions', 'dating_profiles', 'ai_conversations', 'ai_messages', 'ai_message_pins'];
+      for (const t of tableNames) {
+        try {
+          const rows = await p.$queryRawUnsafe(`SELECT COUNT(*)::int as c FROM "${t}"`);
+          tables[t] = rows[0]?.c ?? 0;
+        } catch (te) {
+          tables[t] = `ERROR: ${te.message?.slice(0, 80)}`;
+        }
+      }
+      result.database = { status: 'connected', users: userCount, tables };
     }
   } catch (e) {
     result.database = { status: 'error', error: e.message };
