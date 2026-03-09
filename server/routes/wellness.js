@@ -101,6 +101,7 @@ router.get('/', authenticateToken, async (req, res) => {
         );
     res.json({ wellness: rows.map(mapWellness) });
   } catch (e) {
+    console.error('Wellness list error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -181,6 +182,7 @@ router.post('/', authenticateToken, async (req, res) => {
     } catch (_) {}
     res.status(201).json({ message: 'Created' });
   } catch (e) {
+    console.error('Wellness upsert error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -202,6 +204,7 @@ router.get('/preset', authenticateToken, async (req, res) => {
       body_fat_percent: r.body_fat_percent ?? null
     }});
   } catch (e) {
+    console.error('Wellness get preset error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -224,6 +227,7 @@ router.post('/preset', authenticateToken, async (req, res) => {
     );
     res.json({ message: 'Preset saved' });
   } catch (e) {
+    console.error('Wellness save preset error:', e);
     res.status(500).json({ error: 'Failed to save preset' });
   }
 });
@@ -239,6 +243,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     );
     res.json({ message: 'Deleted' });
   } catch (e) {
+    console.error('Wellness delete error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });

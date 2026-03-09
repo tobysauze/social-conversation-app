@@ -26,6 +26,7 @@ router.get('/', authenticateToken, async (req, res) => {
     }));
     res.json({ entries: legacy });
   } catch (e) {
+    console.error('Journal list error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -47,6 +48,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       updated_at: entry.updatedAt
     } });
   } catch (e) {
+    console.error('Journal get error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -77,6 +79,7 @@ router.post('/', authenticateToken, async (req, res) => {
       updated_at: entry.updatedAt
     } });
   } catch (e) {
+    console.error('Journal create error:', e);
     res.status(500).json({ error: 'Failed to create journal entry' });
   }
 });
@@ -109,6 +112,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     } });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Journal entry not found' });
+    console.error('Journal update error:', e);
     res.status(500).json({ error: 'Failed to update journal entry' });
   }
 });
@@ -121,6 +125,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     res.json({ message: 'Journal entry deleted successfully' });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Journal entry not found' });
+    console.error('Journal delete error:', e);
     res.status(500).json({ error: 'Failed to delete journal entry' });
   }
 });
@@ -145,6 +150,7 @@ router.get('/date-range/:start/:end', authenticateToken, async (req, res) => {
     }));
     res.json({ entries: legacy });
   } catch (e) {
+    console.error('Journal date-range error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });

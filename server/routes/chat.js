@@ -1,17 +1,13 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
-const { getDatabase, dbPath, ensureSqliteUser } = require('../database/init');
 const { prisma } = require('../prisma/client');
 const OpenAI = require('openai');
 
 const router = express.Router();
 
-// OpenRouter-only (OpenAI-compatible API)
 const LLM_API_KEY = process.env.OPENROUTER_API_KEY;
 const LLM_BASE_URL = 'https://openrouter.ai/api/v1';
-const CHAT_MODEL =
-  process.env.OPENROUTER_MODEL ||
-  'openai/gpt-4o-mini';
+const CHAT_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
 const defaultHeaders = process.env.OPENROUTER_API_KEY
   ? {
@@ -20,7 +16,6 @@ const defaultHeaders = process.env.OPENROUTER_API_KEY
     }
   : undefined;
 
-// Create a local OpenAI-compatible client
 const openai = new OpenAI({
   apiKey: LLM_API_KEY,
   ...(LLM_BASE_URL ? { baseURL: LLM_BASE_URL } : {}),
@@ -34,11 +29,7 @@ function pickModel(req) {
   return m || CHAT_MODEL;
 }
 
-// OpenRouter model catalog (public) with lightweight caching
-let openRouterModelsCache = {
-  ts: 0,
-  data: null
-};
+let openRouterModelsCache = { ts: 0, data: null };
 const OPENROUTER_MODELS_TTL_MS = 10 * 60 * 1000;
 
 function toNumber(x) {
@@ -62,14 +53,10 @@ async function fetchOpenRouterModels() {
   if (openRouterModelsCache.data && now - openRouterModelsCache.ts < OPENROUTER_MODELS_TTL_MS) {
     return openRouterModelsCache.data;
   }
-
   const resp = await fetch('https://openrouter.ai/api/v1/models');
-  if (!resp.ok) {
-    throw new Error(`OpenRouter models request failed: ${resp.status}`);
-  }
+  if (!resp.ok) throw new Error(`OpenRouter models request failed: ${resp.status}`);
   const json = await resp.json();
   const models = Array.isArray(json?.data) ? json.data : [];
-
   const normalized = models.map((m) => ({
     id: m.id,
     name: m.name,
@@ -79,26 +66,22 @@ async function fetchOpenRouterModels() {
     pricing: m.pricing || null,
     pricing_per_million: pricingPerMillion(m.pricing)
   }));
-
   openRouterModelsCache = { ts: now, data: normalized };
   return normalized;
 }
 
-// Simple endpoint to help verify which deploy is live
 router.get('/_version', (_req, res) => {
-  const provider = process.env.OPENROUTER_API_KEY ? 'openrouter' : 'none';
   return res.json({
     git: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || null,
     node: process.version,
-    provider,
+    provider: process.env.OPENROUTER_API_KEY ? 'openrouter' : 'none',
     model: CHAT_MODEL,
     has_llm_key: Boolean(LLM_API_KEY),
-    db_path: dbPath,
+    db: 'postgres',
     ts: new Date().toISOString()
   });
 });
 
-// List OpenRouter models (with pricing). Supports optional search query `q`.
 router.get('/models', authenticateToken, async (req, res) => {
   try {
     const q = (req.query?.q || '').toString().trim().toLowerCase();
@@ -119,59 +102,21 @@ router.get('/models', authenticateToken, async (req, res) => {
   }
 });
 
-// Authenticated DB sanity check (helps debug production write failures)
-router.post('/_dbtest', authenticateToken, (req, res) => {
+router.post('/_dbtest', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
-    const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
-    const info = db
-      .prepare(`INSERT INTO ai_conversations (user_id, title) VALUES (?, ?)`)
-      .run(uid, `dbtest-${Date.now()}`);
-    const convId = Number(info.lastInsertRowid);
-    db.prepare(`DELETE FROM ai_conversations WHERE id = ? AND user_id = ?`).run(convId, uid);
-    return res.json({ ok: true, db_path: dbPath });
+    const conv = await prisma.aiConversation.create({
+      data: { userId: req.user.userId, title: `dbtest-${Date.now()}` }
+    });
+    await prisma.aiConversation.delete({ where: { id: conv.id } });
+    return res.json({ ok: true, db: 'postgres' });
   } catch (e) {
-    const msg = e?.message || 'Unknown DB error';
     return res.status(500).json({
       ok: false,
       error: 'DB write failed',
-      db_path: dbPath,
-      message: msg
+      message: e?.message || 'Unknown error'
     });
   }
 });
-
-const nowSql = () => "DATETIME('now')";
-
-let chatTablesEnsured = false;
-function ensureChatTables() {
-  if (chatTablesEnsured) return;
-  const db = getDatabase();
-  try {
-    db.exec(`ALTER TABLE ai_conversations ADD COLUMN person_id INTEGER`);
-  } catch (_) {}
-  try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_person_updated ON ai_conversations(user_id, person_id, updated_at)`);
-  } catch (_) {}
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS ai_message_pins (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        person_id INTEGER NOT NULL,
-        message_id INTEGER NOT NULL,
-        note TEXT,
-        pinned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, person_id, message_id)
-      )
-    `);
-  } catch (_) {}
-  try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_message_pins_user_person_pinned_at ON ai_message_pins(user_id, person_id, pinned_at DESC)`);
-  } catch (_) {}
-  chatTablesEnsured = true;
-}
 
 async function getPersonContextForUser(userId, personId) {
   if (!personId) return '';
@@ -216,7 +161,6 @@ async function getPersonContextForUser(userId, personId) {
   if (textUploads.length > 0) {
     lines.push('');
     lines.push('=== Past text message conversations with this person ===');
-    lines.push('Use these as reference for how the user and this person talk to each other, what they discuss, their tone, inside jokes, etc.');
     for (const upload of textUploads) {
       const maxChars = 3000;
       const truncated = upload.content.length > maxChars
@@ -232,14 +176,13 @@ async function getPersonContextForUser(userId, personId) {
 
 function makeTitleFromMessage(msg) {
   const s = (msg || '').trim().replace(/\s+/g, ' ');
-  if (!s) return 'New chat';
-  return s.length > 60 ? `${s.slice(0, 57)}…` : s;
+  return !s ? 'New chat' : s.length > 60 ? `${s.slice(0, 57)}…` : s;
 }
 
 function safeSummaryFallback(messages) {
   const text = (messages || [])
-    .filter(m => m.role === 'user')
-    .map(m => m.content)
+    .filter((m) => m.role === 'user')
+    .map((m) => m.content)
     .join('\n')
     .trim();
   if (!text) return null;
@@ -251,7 +194,7 @@ async function summarizeConversation(messages) {
   if (!LLM_API_KEY) return safeSummaryFallback(messages);
   const transcript = (messages || [])
     .slice(-24)
-    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
     .join('\n\n');
   const prompt = `Summarize this conversation for future reference in a personal AI chat assistant.
 Return a compact summary (max 8 bullet points) that captures:
@@ -275,7 +218,6 @@ async function getAssistantReply({ model, memorySummaries, messages, personConte
   if (!LLM_API_KEY) {
     return `AI is not configured on the server yet. Set OPENROUTER_API_KEY and restart the backend.`;
   }
-
   const memoryBlock = (memorySummaries || []).length
     ? `\n\nSaved chat memory (summaries of the user's prior chats):\n${memorySummaries.map((s, i) => `(${i + 1}) ${s}`).join('\n')}\n`
     : '';
@@ -284,33 +226,25 @@ async function getAssistantReply({ model, memorySummaries, messages, personConte
     : '';
 
   const system = `You are a helpful, friendly AI chat assistant. Be conversational, ask clarifying questions when needed, and keep responses grounded and practical.${memoryBlock}${personBlock}
-Use the saved chat memory as background context when it’s relevant. Do NOT invent details if memory doesn’t specify them.`;
+Use the saved chat memory as background context when it's relevant. Do NOT invent details if memory doesn't specify them.`;
 
   const res = await openai.chat.completions.create({
     model: model || CHAT_MODEL,
-    messages: [
-      { role: 'system', content: system },
-      ...messages
-    ],
+    messages: [{ role: 'system', content: system }, ...messages],
     temperature: 0.7,
     max_tokens: 650
   });
-
   return res.choices?.[0]?.message?.content?.trim() || 'Sorry—no response.';
 }
 
-// List conversations
-router.get('/conversations', authenticateToken, (req, res) => {
+// List conversations (general chat, no person context)
+router.get('/conversations', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
-    const db = getDatabase();
-    const rows = db.prepare(
-      `SELECT id, title, summary, created_at, updated_at
-       FROM ai_conversations
-       WHERE user_id = ?
-         AND person_id IS NULL
-       ORDER BY updated_at DESC`
-    ).all(req.user.userId);
+    const rows = await prisma.aiConversation.findMany({
+      where: { userId: req.user.userId, personId: null },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, title: true, summary: true, createdAt: true, updatedAt: true }
+    });
     return res.json({ conversations: rows });
   } catch (e) {
     console.error('List conversations error:', e);
@@ -318,23 +252,19 @@ router.get('/conversations', authenticateToken, (req, res) => {
   }
 });
 
-// Get messages for a conversation
-router.get('/conversations/:id/messages', authenticateToken, (req, res) => {
+router.get('/conversations/:id/messages', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const conversationId = Number(req.params.id);
-    const db = getDatabase();
-    const conv = db.prepare(
-      `SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL`
-    ).get(conversationId, req.user.userId);
+    const conv = await prisma.aiConversation.findFirst({
+      where: { id: conversationId, userId: req.user.userId, personId: null }
+    });
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
-    const rows = db.prepare(
-      `SELECT id, role, content, created_at
-       FROM ai_messages
-       WHERE conversation_id = ?
-       ORDER BY id ASC`
-    ).all(conversationId);
+    const rows = await prisma.aiMessage.findMany({
+      where: { conversationId },
+      orderBy: { id: 'asc' },
+      select: { id: true, role: true, content: true, createdAt: true }
+    });
     return res.json({ messages: rows });
   } catch (e) {
     console.error('Get messages error:', e);
@@ -342,32 +272,22 @@ router.get('/conversations/:id/messages', authenticateToken, (req, res) => {
   }
 });
 
-// Rename a conversation
-router.patch('/conversations/:id', authenticateToken, (req, res) => {
+router.patch('/conversations/:id', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const conversationId = Number(req.params.id);
     const title = (req.body?.title || '').toString().trim();
     if (!title) return res.status(400).json({ error: 'title is required' });
 
-    const db = getDatabase();
-    const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
+    const conv = await prisma.aiConversation.updateMany({
+      where: { id: conversationId, userId: req.user.userId, personId: null },
+      data: { title }
+    });
+    if (conv.count === 0) return res.status(404).json({ error: 'Conversation not found' });
 
-    const existing = db
-      .prepare(`SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL`)
-      .get(conversationId, uid);
-    if (!existing) return res.status(404).json({ error: 'Conversation not found' });
-
-    db.prepare(
-      `UPDATE ai_conversations
-       SET title = ?, updated_at = ${nowSql()}
-       WHERE id = ? AND user_id = ?`
-    ).run(title, conversationId, uid);
-
-    const row = db
-      .prepare(`SELECT id, title, summary, created_at, updated_at FROM ai_conversations WHERE id = ? AND user_id = ?`)
-      .get(conversationId, uid);
+    const row = await prisma.aiConversation.findFirst({
+      where: { id: conversationId, userId: req.user.userId },
+      select: { id: true, title: true, summary: true, createdAt: true, updatedAt: true }
+    });
     return res.json({ conversation: row });
   } catch (e) {
     console.error('Rename conversation error:', e);
@@ -375,97 +295,66 @@ router.patch('/conversations/:id', authenticateToken, (req, res) => {
   }
 });
 
-// Send a message (creates a conversation if needed)
 router.post('/message', authenticateToken, async (req, res) => {
   const { conversationId, message, useMemory = true, personId = null } = req.body || {};
   const userMessage = (message || '').toString().trim();
   if (!userMessage) return res.status(400).json({ error: 'message is required' });
 
   try {
-    ensureChatTables();
-    const db = getDatabase();
     const uid = req.user.userId;
-    ensureSqliteUser({ id: uid, email: req.user.email, name: req.user.email });
     const personIdNum = personId ? Number(personId) : null;
 
-    let convId = conversationId ? Number(conversationId) : null;
-    try {
-      if (convId) {
-        const conv = personIdNum
-          ? db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id = ?').get(convId, uid, personIdNum)
-          : db.prepare('SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL').get(convId, uid);
-        if (!conv) return res.status(404).json({ error: 'Conversation not found' });
-      } else {
-        const info = personIdNum
-          ? db.prepare(
-              `INSERT INTO ai_conversations (user_id, title, person_id)
-               VALUES (?, ?, ?)`
-            ).run(uid, makeTitleFromMessage(userMessage), personIdNum)
-          : db.prepare(
-              `INSERT INTO ai_conversations (user_id, title, person_id)
-               VALUES (?, ?, NULL)`
-            ).run(uid, makeTitleFromMessage(userMessage));
-        convId = Number(info.lastInsertRowid);
-      }
-
-      // Insert user message
-      db.prepare(
-        `INSERT INTO ai_messages (conversation_id, role, content)
-         VALUES (?, ?, ?)`
-      ).run(convId, 'user', userMessage);
-    } catch (dbWriteErr) {
-      console.error('Chat DB write failed:', dbWriteErr);
-      const msg = dbWriteErr?.message || 'Database write failed';
-      const looksReadonly = /readonly|SQLITE_READONLY/i.test(msg);
-      return res.status(500).json({
-        error: looksReadonly
-          ? 'Chat storage is read-only on the server. Configure a writable DATABASE_DIR or attach a persistent disk.'
-          : 'Failed to save chat message',
-        // Include error message so we can diagnose (permissions vs missing tables vs locks)
-        message: msg
+    let conv;
+    if (conversationId) {
+      conv = await prisma.aiConversation.findFirst({
+        where: {
+          id: Number(conversationId),
+          userId: uid,
+          personId: personIdNum
+        }
+      });
+      if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    } else {
+      conv = await prisma.aiConversation.create({
+        data: {
+          userId: uid,
+          personId: personIdNum,
+          title: makeTitleFromMessage(userMessage)
+        }
       });
     }
 
-    // Load recent messages for this conversation
-    const recentRows = db.prepare(
-      `SELECT role, content
-       FROM ai_messages
-       WHERE conversation_id = ?
-       ORDER BY id DESC
-       LIMIT 24`
-    ).all(convId).reverse();
+    await prisma.aiMessage.create({
+      data: { conversationId: conv.id, role: 'user', content: userMessage }
+    });
 
-    // Load memory summaries from other conversations
+    const recentRows = await prisma.aiMessage.findMany({
+      where: { conversationId: conv.id },
+      orderBy: { id: 'desc' },
+      take: 24,
+      select: { role: true, content: true }
+    });
+    const messagesForAI = recentRows.reverse();
+
     const memorySummaries = useMemory
-      ? (personIdNum
-          ? db.prepare(
-              `SELECT summary
-               FROM ai_conversations
-               WHERE user_id = ?
-                 AND id != ?
-                 AND person_id = ?
-                 AND summary IS NOT NULL
-                 AND TRIM(summary) != ''
-               ORDER BY updated_at DESC
-               LIMIT 8`
-            ).all(uid, convId, personIdNum)
-          : db.prepare(
-              `SELECT summary
-               FROM ai_conversations
-               WHERE user_id = ?
-                 AND id != ?
-                 AND person_id IS NULL
-                 AND summary IS NOT NULL
-                 AND TRIM(summary) != ''
-               ORDER BY updated_at DESC
-               LIMIT 8`
-            ).all(uid, convId)
-        ).map((r) => r.summary)
+      ? (
+          await prisma.aiConversation.findMany({
+            where: {
+              userId: uid,
+              id: { not: conv.id },
+              personId: personIdNum,
+              summary: { not: null }
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 8,
+            select: { summary: true }
+          })
+        )
+          .map((r) => r.summary)
+          .filter(Boolean)
       : [];
 
-    // Get assistant reply; if OpenAI errors, degrade gracefully instead of 500-ing the whole request.
     const chosenModel = pickModel(req);
-
     const personContext = personIdNum ? await getPersonContextForUser(uid, personIdNum) : '';
 
     let assistantText;
@@ -473,77 +362,61 @@ router.post('/message', authenticateToken, async (req, res) => {
       assistantText = await getAssistantReply({
         model: chosenModel,
         memorySummaries,
-        messages: recentRows,
+        messages: messagesForAI,
         personContext
       });
     } catch (aiErr) {
       console.error('AI chat completion failed:', aiErr);
-      const msg = aiErr?.message || 'Unknown error';
       assistantText =
         process.env.NODE_ENV === 'production'
           ? `The AI service is temporarily unavailable. Please try again in a minute.`
-          : `AI call failed: ${msg}`;
+          : `AI call failed: ${aiErr?.message || 'Unknown error'}`;
     }
 
-    // Insert assistant message
-    db.prepare(
-      `INSERT INTO ai_messages (conversation_id, role, content)
-       VALUES (?, ?, ?)`
-    ).run(convId, 'assistant', assistantText);
+    await prisma.aiMessage.create({
+      data: { conversationId: conv.id, role: 'assistant', content: assistantText }
+    });
 
-    // Update conversation updated_at
-    db.prepare(
-      `UPDATE ai_conversations
-       SET updated_at = ${nowSql()}
-       WHERE id = ? AND user_id = ?`
-    ).run(convId, uid);
+    await prisma.aiConversation.update({
+      where: { id: conv.id },
+      data: { updatedAt: new Date() }
+    });
 
-    // Refresh recent with assistant included for summary
-    const recentWithAssistant = db.prepare(
-      `SELECT role, content
-       FROM ai_messages
-       WHERE conversation_id = ?
-       ORDER BY id DESC
-       LIMIT 24`
-    ).all(convId).reverse();
+    const recentWithAssistant = await prisma.aiMessage.findMany({
+      where: { conversationId: conv.id },
+      orderBy: { id: 'desc' },
+      take: 24,
+      select: { role: true, content: true }
+    });
+    const forSummary = recentWithAssistant.reverse();
 
-    // Update summary (best-effort)
     try {
-      const summary = await summarizeConversation(recentWithAssistant);
+      const summary = await summarizeConversation(forSummary);
       if (summary) {
-        db.prepare(
-          `UPDATE ai_conversations
-           SET summary = ?, updated_at = ${nowSql()}
-           WHERE id = ? AND user_id = ?`
-        ).run(summary, convId, uid);
+        await prisma.aiConversation.update({
+          where: { id: conv.id },
+          data: { summary }
+        });
       }
     } catch (sumErr) {
       console.warn('Chat summary failed:', sumErr?.message);
     }
 
-    return res.json({
-      conversationId: convId,
-      assistant: assistantText
-    });
+    return res.json({ conversationId: conv.id, assistant: assistantText });
   } catch (e) {
     console.error('Chat message error:', e);
     return res.status(500).json({ error: 'Failed to send message' });
   }
 });
 
-// List conversations for one person context
-router.get('/person/:personId/conversations', authenticateToken, (req, res) => {
+router.get('/person/:personId/conversations', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const personId = Number(req.params.personId);
-    const db = getDatabase();
-    const rows = db.prepare(
-      `SELECT id, title, summary, created_at, updated_at
-       FROM ai_conversations
-       WHERE user_id = ?
-         AND person_id = ?
-       ORDER BY updated_at DESC`
-    ).all(req.user.userId, personId);
+    const rows = await prisma.aiConversation.findMany({
+      where: { userId: req.user.userId, personId },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, title: true, summary: true, createdAt: true, updatedAt: true }
+    });
     return res.json({ conversations: rows });
   } catch (e) {
     console.error('List person conversations error:', e);
@@ -551,34 +424,35 @@ router.get('/person/:personId/conversations', authenticateToken, (req, res) => {
   }
 });
 
-router.get('/person/:personId/conversations/:id/messages', authenticateToken, (req, res) => {
+router.get('/person/:personId/conversations/:id/messages', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const personId = Number(req.params.personId);
     const conversationId = Number(req.params.id);
-    const db = getDatabase();
-    const conv = db.prepare(
-      `SELECT id FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id = ?`
-    ).get(conversationId, req.user.userId, personId);
+    const conv = await prisma.aiConversation.findFirst({
+      where: { id: conversationId, userId: req.user.userId, personId }
+    });
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
-    const rows = db.prepare(
-      `SELECT
-         m.id,
-         m.role,
-         m.content,
-         m.created_at,
-         CASE WHEN p.id IS NULL THEN 0 ELSE 1 END AS is_pinned,
-         p.note AS pinned_note,
-         p.pinned_at
-       FROM ai_messages m
-       LEFT JOIN ai_message_pins p
-         ON p.message_id = m.id
-        AND p.user_id = ?
-        AND p.person_id = ?
-       WHERE m.conversation_id = ?
-       ORDER BY m.id ASC`
-    ).all(req.user.userId, personId, conversationId);
+    const messages = await prisma.aiMessage.findMany({
+      where: { conversationId },
+      orderBy: { id: 'asc' },
+      include: {
+        pins: {
+          where: { userId: req.user.userId, personId },
+          select: { id: true, note: true, pinnedAt: true }
+        }
+      }
+    });
+
+    const rows = messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      created_at: m.createdAt,
+      is_pinned: m.pins.length > 0 ? 1 : 0,
+      pinned_note: m.pins[0]?.note ?? null,
+      pinned_at: m.pins[0]?.pinnedAt ?? null
+    }));
     return res.json({ messages: rows });
   } catch (e) {
     console.error('Get person messages error:', e);
@@ -586,31 +460,43 @@ router.get('/person/:personId/conversations/:id/messages', authenticateToken, (r
   }
 });
 
-router.get('/person/:personId/pins', authenticateToken, (req, res) => {
+router.get('/person/:personId/pins', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const personId = Number(req.params.personId);
-    const db = getDatabase();
-    const rows = db.prepare(
-      `SELECT
-         p.id,
-         p.message_id,
-         p.note,
-         p.pinned_at,
-         m.role,
-         m.content,
-         m.created_at,
-         c.id AS conversation_id,
-         c.title AS conversation_title
-       FROM ai_message_pins p
-       JOIN ai_messages m ON m.id = p.message_id
-       JOIN ai_conversations c ON c.id = m.conversation_id
-       WHERE p.user_id = ?
-         AND p.person_id = ?
-         AND c.user_id = ?
-         AND c.person_id = ?
-       ORDER BY p.pinned_at DESC`
-    ).all(req.user.userId, personId, req.user.userId, personId);
+    const uid = req.user.userId;
+
+    const pins = await prisma.aiMessagePin.findMany({
+      where: {
+        userId: uid,
+        personId,
+        message: {
+          conversation: { userId: uid, personId }
+        }
+      },
+      orderBy: { pinnedAt: 'desc' },
+      include: {
+        message: {
+          select: { id: true, role: true, content: true, createdAt: true },
+          include: {
+            conversation: {
+              select: { id: true, title: true }
+            }
+          }
+        }
+      }
+    });
+
+    const rows = pins.map((p) => ({
+      id: p.id,
+      message_id: p.messageId,
+      note: p.note,
+      pinned_at: p.pinnedAt,
+      role: p.message.role,
+      content: p.message.content,
+      created_at: p.message.createdAt,
+      conversation_id: p.message.conversation.id,
+      conversation_title: p.message.conversation.title
+    }));
     return res.json({ pins: rows });
   } catch (e) {
     console.error('List person pins error:', e);
@@ -618,39 +504,36 @@ router.get('/person/:personId/pins', authenticateToken, (req, res) => {
   }
 });
 
-router.post('/person/:personId/messages/:messageId/pin', authenticateToken, (req, res) => {
+router.post('/person/:personId/messages/:messageId/pin', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const personId = Number(req.params.personId);
     const messageId = Number(req.params.messageId);
     const shouldPin = req.body?.pinned !== false;
     const note = (req.body?.note || '').toString().trim() || null;
-    const db = getDatabase();
+    const uid = req.user.userId;
 
-    const row = db.prepare(
-      `SELECT m.id
-       FROM ai_messages m
-       JOIN ai_conversations c ON c.id = m.conversation_id
-       WHERE m.id = ?
-         AND c.user_id = ?
-         AND c.person_id = ?`
-    ).get(messageId, req.user.userId, personId);
-    if (!row) return res.status(404).json({ error: 'Message not found' });
+    const msg = await prisma.aiMessage.findFirst({
+      where: {
+        id: messageId,
+        conversation: { userId: uid, personId }
+      }
+    });
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
 
     if (shouldPin) {
-      db.prepare(
-        `INSERT INTO ai_message_pins (user_id, person_id, message_id, note)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(user_id, person_id, message_id)
-         DO UPDATE SET note=excluded.note, pinned_at=CURRENT_TIMESTAMP`
-      ).run(req.user.userId, personId, messageId, note);
+      await prisma.aiMessagePin.upsert({
+        where: {
+          userId_personId_messageId: { userId: uid, personId, messageId }
+        },
+        create: { userId: uid, personId, messageId, note },
+        update: { note }
+      });
       return res.json({ status: 'pinned' });
     }
 
-    db.prepare(
-      `DELETE FROM ai_message_pins
-       WHERE user_id = ? AND person_id = ? AND message_id = ?`
-    ).run(req.user.userId, personId, messageId);
+    await prisma.aiMessagePin.deleteMany({
+      where: { userId: uid, personId, messageId }
+    });
     return res.json({ status: 'unpinned' });
   } catch (e) {
     console.error('Pin person message error:', e);
@@ -658,16 +541,14 @@ router.post('/person/:personId/messages/:messageId/pin', authenticateToken, (req
   }
 });
 
-router.delete('/person/:personId/conversations/:id', authenticateToken, (req, res) => {
+router.delete('/person/:personId/conversations/:id', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const personId = Number(req.params.personId);
     const conversationId = Number(req.params.id);
-    const db = getDatabase();
-    const info = db.prepare(
-      `DELETE FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id = ?`
-    ).run(conversationId, req.user.userId, personId);
-    if (!info.changes) return res.status(404).json({ error: 'Conversation not found' });
+    const result = await prisma.aiConversation.deleteMany({
+      where: { id: conversationId, userId: req.user.userId, personId }
+    });
+    if (result.count === 0) return res.status(404).json({ error: 'Conversation not found' });
     return res.json({ status: 'deleted' });
   } catch (e) {
     console.error('Delete person conversation error:', e);
@@ -675,16 +556,13 @@ router.delete('/person/:personId/conversations/:id', authenticateToken, (req, re
   }
 });
 
-// Delete a conversation
-router.delete('/conversations/:id', authenticateToken, (req, res) => {
+router.delete('/conversations/:id', authenticateToken, async (req, res) => {
   try {
-    ensureChatTables();
     const conversationId = Number(req.params.id);
-    const db = getDatabase();
-    const info = db.prepare(
-      `DELETE FROM ai_conversations WHERE id = ? AND user_id = ? AND person_id IS NULL`
-    ).run(conversationId, req.user.userId);
-    if (!info.changes) return res.status(404).json({ error: 'Conversation not found' });
+    const result = await prisma.aiConversation.deleteMany({
+      where: { id: conversationId, userId: req.user.userId, personId: null }
+    });
+    if (result.count === 0) return res.status(404).json({ error: 'Conversation not found' });
     return res.json({ status: 'deleted' });
   } catch (e) {
     console.error('Delete conversation error:', e);
@@ -693,4 +571,3 @@ router.delete('/conversations/:id', authenticateToken, (req, res) => {
 });
 
 module.exports = router;
-

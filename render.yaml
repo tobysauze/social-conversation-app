@@ -12,6 +12,7 @@ services:
         value: your-super-secret-jwt-key-here-make-it-long-and-random-12345
       - key: FRONTEND_URL
         value: https://your-app.vercel.app
+      # Add DATABASE_URL: create a Postgres DB in Render, then add its connection string as env var
 
 
 

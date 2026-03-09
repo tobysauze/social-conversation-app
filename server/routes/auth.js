@@ -2,12 +2,10 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../prisma/client');
-const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Register
 router.post('/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
@@ -16,32 +14,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email, password, and name are required' });
     }
 
-    // Hash password and create user if not exists
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    let created = null;
-    try {
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (existing) return res.status(400).json({ error: 'User already exists' });
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(400).json({ error: 'User already exists' });
 
-      created = await prisma.user.create({
-        data: { email, password: passwordHash, name }
-      });
-    } catch (e) {
-      // Fallback to bundled SQLite
-      const db = getDatabase();
-      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-      if (existing) return res.status(400).json({ error: 'User already exists' });
-
-      const info = db
-        .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
-        .run(email, passwordHash, name);
-      const row = db
-        .prepare('SELECT id, email, name FROM users WHERE id = ?')
-        .get(info.lastInsertRowid);
-      created = { id: row.id, email: row.email, name: row.name };
-    }
+    const created = await prisma.user.create({
+      data: { email, password: passwordHash, name }
+    });
 
     const token = jwt.sign(
       { userId: created.id, email: created.email },
@@ -60,7 +41,6 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -69,47 +49,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    let user = null;
-    let usedSQLiteFallback = false;
-
-    // Try Prisma/Postgres first
-    try {
-      user = await prisma.user.findFirst({ where: { name: username } });
-    } catch (e) {
-      usedSQLiteFallback = true;
-    }
-
-    // Fallback to bundled SQLite if Prisma is unavailable (e.g., no DATABASE_URL/migrations yet)
-    if (usedSQLiteFallback) {
-      try {
-        const db = getDatabase();
-        user = db
-          .prepare('SELECT id, email, name, password_hash FROM users WHERE name = ?')
-          .get(username) || null;
-
-        if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-        const isValidPassword = await bcrypt.compare(password, user.password_hash);
-        if (!isValidPassword) return res.status(401).json({ error: 'Invalid credentials' });
-
-        const token = jwt.sign(
-          { userId: user.id, email: user.email },
-          process.env.JWT_SECRET,
-          { expiresIn: '7d' }
-        );
-
-        return res.json({
-          message: 'Login successful',
-          token,
-          user: { id: user.id, email: user.email, name: user.name }
-        });
-      } catch (fallbackErr) {
-        console.error('SQLite fallback login error:', fallbackErr);
-        return res.status(500).json({ error: 'Database error' });
-      }
-    }
-
-    // Prisma path (Postgres)
+    const user = await prisma.user.findFirst({ where: { name: username } });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -132,7 +72,6 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Change password
 router.post('/change-password', authenticateToken, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -145,36 +84,10 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
 
-    let user = null;
-    let usedSQLiteFallback = false;
-
-    try {
-      user = await prisma.user.findUnique({
-        where: { id: req.user.userId },
-        select: { id: true, password: true }
-      });
-    } catch (e) {
-      usedSQLiteFallback = true;
-    }
-
-    if (usedSQLiteFallback) {
-      const db = getDatabase();
-      const row = db
-        .prepare('SELECT id, password_hash FROM users WHERE id = ?')
-        .get(req.user.userId);
-
-      if (!row) return res.status(404).json({ error: 'User not found' });
-
-      const isValid = await bcrypt.compare(currentPassword, row.password_hash);
-      if (!isValid) return res.status(400).json({ error: 'Current password is incorrect' });
-
-      const newHash = await bcrypt.hash(newPassword, 12);
-      db
-        .prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(newHash, req.user.userId);
-
-      return res.json({ message: 'Password updated successfully' });
-    }
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { id: true, password: true }
+    });
 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -194,25 +107,12 @@ router.post('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
-// Get current user
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    let user = null;
-    try {
-      user = await prisma.user.findUnique({
-        where: { id: req.user.userId },
-        select: { id: true, email: true, name: true, createdAt: true }
-      });
-    } catch (e) {
-      // Fallback to SQLite
-      const db = getDatabase();
-      const row = db
-        .prepare('SELECT id, email, name, created_at FROM users WHERE id = ?')
-        .get(req.user.userId);
-      user = row
-        ? { id: row.id, email: row.email, name: row.name, createdAt: row.created_at }
-        : null;
-    }
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { id: true, email: true, name: true, createdAt: true }
+    });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -220,9 +120,9 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     res.json({ user });
   } catch (err) {
+    console.error('Auth /me error:', err);
     return res.status(500).json({ error: 'Database error' });
   }
 });
 
 module.exports = router;
-

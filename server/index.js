@@ -113,9 +113,31 @@ app.use('/api/dating', datingRoutes);
 app.use('/api/protocols', protocolsRoutes);
 app.use('/api/dreams', dreamsRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+// Health check endpoint with database diagnostic
+app.get('/api/health', async (req, res) => {
+  const result = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    port: PORT,
+    nodeEnv: process.env.NODE_ENV,
+    database: { status: 'unknown' }
+  };
+
+  try {
+    const { prisma: p } = require('./prisma/client');
+    if (!p) {
+      result.database = { status: 'error', error: 'Prisma client is null' };
+    } else {
+      const dbResult = await p.$queryRaw`SELECT 1 as ok`;
+      const userCount = await p.user.count();
+      result.database = { status: 'connected', users: userCount };
+    }
+  } catch (e) {
+    result.database = { status: 'error', error: e.message };
+  }
+
+  res.json(result);
 });
 
 // Error handling middleware
@@ -124,18 +146,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ 
     error: 'Something went wrong!',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
-});
-
-// Health check endpoint for Railway
-app.get('/api/health', (req, res) => {
-  console.log('Health check requested');
-  res.status(200).json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    port: PORT,
-    nodeEnv: process.env.NODE_ENV
   });
 });
 

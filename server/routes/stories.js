@@ -1,141 +1,75 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
-const { getDatabase } = require('../database/init');
 const { authenticateToken } = require('../middleware/auth');
 const { extractStories, refineStory, generateConversationStarters, buildRefinePrompt } = require('../services/openai');
 
 const router = express.Router();
 
-// Get all stories for a user
 router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20, tone } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
   try {
-    try {
-      const stories = await prisma.story.findMany({
-        where: { userId: req.user.userId, ...(tone ? { tone } : {}) },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: Number(limit)
-      });
-      const legacy = stories.map(s => ({
-        id: s.id,
-        user_id: s.userId,
-        journal_entry_id: s.journalEntryId,
-        title: s.title,
-        content: s.content,
-        tone: s.tone,
-        duration_seconds: s.durationSeconds,
-        tags: s.tags ? (typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags) : [],
-        times_told: s.timesTold,
-        success_rating: s.successRating,
-        created_at: s.createdAt,
-        updated_at: s.updatedAt
-      }));
-      return res.json({ stories: legacy });
-    } catch (pgErr) {
-      // Fallback to SQLite
-      const db = getDatabase();
-      const rows = db.prepare(
-        `SELECT id, user_id, journal_entry_id, title, content, tone, duration_seconds, tags, times_told, success_rating, created_at, updated_at
-         FROM stories
-         WHERE user_id = ? ${tone ? 'AND tone = ?' : ''}
-         ORDER BY created_at DESC
-         LIMIT ? OFFSET ?`
-      ).all(...[req.user.userId, ...(tone ? [tone] : []), Number(limit), skip]);
-      const legacy = rows.map(s => ({
-        id: s.id,
-        user_id: s.user_id,
-        journal_entry_id: s.journal_entry_id,
-        title: s.title,
-        content: s.content,
-        tone: s.tone,
-        duration_seconds: s.duration_seconds,
-        tags: s.tags ? (typeof s.tags === 'string' && s.tags.trim().startsWith('[') ? JSON.parse(s.tags) : [s.tags]) : [],
-        times_told: s.times_told,
-        success_rating: s.success_rating,
-        created_at: s.created_at,
-        updated_at: s.updated_at
-      }));
-      return res.json({ stories: legacy });
-    }
+    const stories = await prisma.story.findMany({
+      where: { userId: req.user.userId, ...(tone ? { tone } : {}) },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit)
+    });
+    const legacy = stories.map((s) => ({
+      id: s.id,
+      user_id: s.userId,
+      journal_entry_id: s.journalEntryId,
+      title: s.title,
+      content: s.content,
+      tone: s.tone,
+      duration_seconds: s.durationSeconds,
+      tags: s.tags ? (typeof s.tags === 'string' ? JSON.parse(s.tags) : s.tags) : [],
+      times_told: s.timesTold,
+      success_rating: s.successRating,
+      created_at: s.createdAt,
+      updated_at: s.updatedAt
+    }));
+    return res.json({ stories: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-// Get a specific story
 router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
-    try {
-      const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
-      if (!story) return res.status(404).json({ error: 'Story not found' });
-      const legacy = {
-        id: story.id,
-        user_id: story.userId,
-        journal_entry_id: story.journalEntryId,
-        title: story.title,
-        content: story.content,
-        tone: story.tone,
-        duration_seconds: story.durationSeconds,
-        tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
-        times_told: story.timesTold,
-        success_rating: story.successRating,
-        created_at: story.createdAt,
-        updated_at: story.updatedAt
-      };
-      return res.json({ story: legacy });
-    } catch (pgErr) {
-      const db = getDatabase();
-      const s = db.prepare(
-        'SELECT * FROM stories WHERE id = ? AND user_id = ?'
-      ).get(Number(id), req.user.userId);
-      if (!s) return res.status(404).json({ error: 'Story not found' });
-      const legacy = {
-        id: s.id,
-        user_id: s.user_id,
-        journal_entry_id: s.journal_entry_id,
-        title: s.title,
-        content: s.content,
-        tone: s.tone,
-        duration_seconds: s.duration_seconds,
-        tags: s.tags ? (typeof s.tags === 'string' && s.tags.trim().startsWith('[') ? JSON.parse(s.tags) : [s.tags]) : [],
-        times_told: s.times_told,
-        success_rating: s.success_rating,
-        created_at: s.created_at,
-        updated_at: s.updated_at
-      };
-      return res.json({ story: legacy });
-    }
+    const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    const legacy = {
+      id: story.id,
+      user_id: story.userId,
+      journal_entry_id: story.journalEntryId,
+      title: story.title,
+      content: story.content,
+      tone: story.tone,
+      duration_seconds: story.durationSeconds,
+      tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
+      times_told: story.timesTold,
+      success_rating: story.successRating,
+      created_at: story.createdAt,
+      updated_at: story.updatedAt
+    };
+    return res.json({ story: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-// Extract stories from a journal entry
 router.post('/extract/:journalId', authenticateToken, async (req, res) => {
   try {
     const { journalId } = req.params;
-    const db = getDatabase();
+    const entry = await prisma.journalEntry.findFirst({
+      where: { id: Number(journalId), userId: req.user.userId }
+    });
+    if (!entry) return res.status(404).json({ error: 'Journal entry not found' });
 
-    // Get the journal entry (better-sqlite3 is sync)
-    const entry = db
-      .prepare('SELECT * FROM journal_entries WHERE id = ? AND user_id = ?')
-      .get(Number(journalId), req.user.userId);
-
-    if (!entry) {
-      return res.status(404).json({ error: 'Journal entry not found' });
-    }
-
-    try {
-      // Extract stories using OpenAI
-      const extractedStories = await extractStories(entry.content);
-      return res.json({ stories: extractedStories.stories });
-    } catch (error) {
-      console.error('Story extraction error:', error);
-      return res.status(500).json({ error: 'Failed to extract stories' });
-    }
+    const extractedStories = await extractStories(entry.content);
+    return res.json({ stories: extractedStories.stories });
   } catch (error) {
     console.error('Extract stories error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -158,70 +92,32 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Title and content are required' });
     }
 
-    try {
-      const story = await prisma.story.create({
-        data: {
-          userId: req.user.userId,
-          journalEntryId: journal_entry_id || null,
-          title,
-          content,
-          tone,
-          durationSeconds: duration_seconds,
-          tags: tags ? JSON.stringify(tags) : null
-        }
-      });
-      const legacy = {
-        id: story.id,
-        user_id: story.userId,
-        journal_entry_id: story.journalEntryId,
-        title: story.title,
-        content: story.content,
-        tone: story.tone,
-        duration_seconds: story.durationSeconds,
-        tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
-        times_told: story.timesTold,
-        success_rating: story.successRating,
-        created_at: story.createdAt,
-        updated_at: story.updatedAt
-      };
-      res.status(201).json({ story: legacy });
-    } catch (e) {
-      // Fallback to SQLite
-      try {
-        const db = getDatabase();
-        const stmt = db.prepare(
-          `INSERT INTO stories (user_id, journal_entry_id, title, content, tone, duration_seconds, tags)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        );
-        const info = stmt.run(
-          req.user.userId,
-          journal_entry_id || null,
-          title,
-          content,
-          tone,
-          duration_seconds,
-          tags ? JSON.stringify(tags) : null
-        );
-        const row = db.prepare('SELECT * FROM stories WHERE id = ?').get(info.lastInsertRowid);
-        const legacy = {
-          id: row.id,
-          user_id: row.user_id,
-          journal_entry_id: row.journal_entry_id,
-          title: row.title,
-          content: row.content,
-          tone: row.tone,
-          duration_seconds: row.duration_seconds,
-          tags: row.tags ? (typeof row.tags === 'string' && row.tags.trim().startsWith('[') ? JSON.parse(row.tags) : [row.tags]) : [],
-          times_told: row.times_told,
-          success_rating: row.success_rating,
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        };
-        return res.status(201).json({ story: legacy });
-      } catch (sqliteErr) {
-        return res.status(500).json({ error: 'Failed to create story' });
+    const story = await prisma.story.create({
+      data: {
+        userId: req.user.userId,
+        journalEntryId: journal_entry_id || null,
+        title,
+        content,
+        tone,
+        durationSeconds: duration_seconds,
+        tags: tags ? JSON.stringify(tags) : null
       }
-    }
+    });
+    const legacy = {
+      id: story.id,
+      user_id: story.userId,
+      journal_entry_id: story.journalEntryId,
+      title: story.title,
+      content: story.content,
+      tone: story.tone,
+      duration_seconds: story.durationSeconds,
+      tags: story.tags ? (typeof story.tags === 'string' ? JSON.parse(story.tags) : story.tags) : [],
+      times_told: story.timesTold,
+      success_rating: story.successRating,
+      created_at: story.createdAt,
+      updated_at: story.updatedAt
+    };
+    res.status(201).json({ story: legacy });
   } catch (error) {
     console.error('Create story error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -238,24 +134,13 @@ router.post('/:id/refine', authenticateToken, async (req, res) => {
     const story = await prisma.story.findFirst({ where: { id: Number(id), userId: req.user.userId } });
     if (!story) return res.status(404).json({ error: 'Story not found' });
 
-    // Fetch all existing stories for this user to use as style examples
-    let existingStories = [];
-    try {
-      const allStories = await prisma.story.findMany({
-        where: { userId: req.user.userId },
-        orderBy: { createdAt: 'desc' },
-        take: 10, // Limit to most recent 10 to avoid token bloat
-        select: { title: true, content: true }
-      });
-      existingStories = allStories.filter(s => s.id !== Number(id)); // Exclude current story
-    } catch (pgErr) {
-      // Fallback to SQLite
-      const db = getDatabase();
-      const rows = db.prepare(
-        `SELECT title, content FROM stories WHERE user_id = ? AND id != ? ORDER BY created_at DESC LIMIT 10`
-      ).all(req.user.userId, Number(id));
-      existingStories = rows;
-    }
+    const allStories = await prisma.story.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: { title: true, content: true }
+    });
+    const existingStories = allStories.filter((s) => s.id !== Number(id));
 
     try {
       // Allow preview of prompt without sending to LLM
@@ -298,50 +183,22 @@ router.get('/:id/conversation-starters', authenticateToken, async (req, res) => 
   try {
     const { id } = req.params;
 
-    // Get the story content (Prisma first, fallback to SQLite)
-    let story = null;
-    try {
-      story = await prisma.story.findFirst({
-        where: { id: Number(id), userId: req.user.userId },
-        select: { content: true }
-      });
-    } catch (e) {
-      // ignore, fall back below
-    }
-
-    if (!story) {
-      const db = getDatabase();
-      story = db
-        .prepare('SELECT content FROM stories WHERE id = ? AND user_id = ?')
-        .get(Number(id), req.user.userId);
-    }
-
-    if (!story) {
-      return res.status(404).json({ error: 'Story not found' });
-    }
+    const story = await prisma.story.findFirst({
+      where: { id: Number(id), userId: req.user.userId },
+      select: { content: true }
+    });
+    if (!story) return res.status(404).json({ error: 'Story not found' });
 
     try {
       const starters = await generateConversationStarters(story.content);
 
-      // Persist starters (Prisma first, fallback to SQLite)
-      try {
-        await Promise.all(
-          starters.questions.map((question) =>
-            prisma.conversationStarter.create({
-              data: { userId: req.user.userId, storyId: Number(id), question }
-            })
-          )
-        );
-      } catch (e) {
-        const db = getDatabase();
-        const stmt = db.prepare(
-          'INSERT INTO conversation_starters (user_id, story_id, question) VALUES (?, ?, ?)'
-        );
-        const insertMany = db.transaction((questions) => {
-          for (const q of questions) stmt.run(req.user.userId, Number(id), q);
-        });
-        insertMany(starters.questions);
-      }
+      await Promise.all(
+        starters.questions.map((question) =>
+          prisma.conversationStarter.create({
+            data: { userId: req.user.userId, storyId: Number(id), question }
+          })
+        )
+      );
 
       return res.json({ conversation_starters: starters.questions });
     } catch (error) {

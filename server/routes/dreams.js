@@ -7,6 +7,10 @@ const router = express.Router();
 
 // Get all dream entries for a user
 router.get('/', authenticateToken, async (req, res) => {
+  if (!prisma) {
+    console.error('Dreams: Prisma client not available');
+    return res.status(503).json({ error: 'Database not configured' });
+  }
   const { page = 1, limit = 20 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
   try {
@@ -28,6 +32,7 @@ router.get('/', authenticateToken, async (req, res) => {
     }));
     res.json({ entries: legacy });
   } catch (e) {
+    console.error('Dream list error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 });
@@ -65,14 +70,23 @@ router.post('/', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Content is required' });
   }
 
+  if (!prisma) {
+    console.error('Dreams: Prisma client not available');
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+
   try {
+    const tagsValue = tags == null ? null
+      : Array.isArray(tags) ? JSON.stringify(tags)
+      : typeof tags === 'string' ? JSON.stringify(tags.split(',').map((t) => t.trim()).filter(Boolean))
+      : null;
     const entry = await prisma.dreamEntry.create({
       data: {
-        userId: req.user.userId,
+        userId: Number(req.user.userId),
         content: content.trim(),
         title: title?.trim() || null,
         sleepQuality: sleep_quality || null,
-        tags: tags ? JSON.stringify(tags) : null
+        tags: tagsValue
       }
     });
     res.status(201).json({
@@ -88,6 +102,10 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     });
   } catch (e) {
+    console.error('Dream create error:', e);
+    if (e.code === 'P2003') {
+      return res.status(400).json({ error: 'Invalid user. Please log in again.' });
+    }
     res.status(500).json({ error: 'Failed to create dream entry' });
   }
 });

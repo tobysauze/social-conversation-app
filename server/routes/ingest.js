@@ -1,14 +1,11 @@
 const express = require('express');
-const { getDatabase } = require('../database/init');
 const { prisma } = require('../prisma/client');
 
 const router = express.Router();
 
-// Lightweight token auth specific to ingestion webhooks (bypasses JWT)
 function validateIngestToken(req) {
   const header = req.headers['x-ingest-token'] || req.headers['authorization'];
   if (!header) return false;
-  // Support either raw token in X-Ingest-Token or Bearer TOKEN in Authorization
   const token = header.toString().startsWith('Bearer ')
     ? header.toString().slice('Bearer '.length)
     : header.toString();
@@ -20,7 +17,6 @@ router.post('/apple-health', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const db = getDatabase();
   const payload = req.body || {};
   const {
     user_id: userId = null,
@@ -30,20 +26,18 @@ router.post('/apple-health', async (req, res) => {
   } = payload;
 
   try {
-    const stmt = db.prepare(
-      `INSERT INTO health_intake_events (user_id, source, event_type, event_date, payload_json)
-       VALUES (?, ?, ?, ?, ?)`
-    );
-    stmt.run(
-      userId,
-      source,
-      eventType,
-      eventDate,
-      JSON.stringify(payload)
-    );
-    // Also upsert into wellness_entries when daily metrics are present
+    await prisma.healthIntakeEvent.create({
+      data: {
+        userId: userId ? Number(userId) : null,
+        source,
+        eventType,
+        eventDate,
+        payloadJson: JSON.stringify(payload)
+      }
+    });
+
     try {
-      const date = eventDate || new Date().toISOString().slice(0,10);
+      const date = eventDate || new Date().toISOString().slice(0, 10);
       const exerciseMinutes = Number(payload.exercise_minutes ?? payload.active_minutes ?? 0) || 0;
       const exerciseIntensity = payload.exercise_intensity ? Number(payload.exercise_intensity) : null;
       const sleepScore = payload.sleep_score ? Number(payload.sleep_score) : (payload.sleepHours ? Math.round(Math.min(100, Number(payload.sleepHours) * 12)) : null);
@@ -87,5 +81,3 @@ router.post('/apple-health', async (req, res) => {
 });
 
 module.exports = router;
-
-
