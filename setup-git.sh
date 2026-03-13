@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Social Conversation App - Git Setup Script
+# Innerwork - Git Setup Script
 echo "🚀 Setting up Git repository for deployment..."
 
 # Check if git is initialized
@@ -16,7 +16,7 @@ git add .
 
 # Create initial commit
 echo "💾 Creating initial commit..."
-git commit -m "Initial commit: Social Conversation App ready for deployment"
+git commit -m "Initial commit: Innerwork ready for deployment"
 
 echo ""
 echo "✅ Git repository is ready!"

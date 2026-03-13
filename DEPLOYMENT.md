@@ -1,6 +1,6 @@
-# 🚀 Deployment Guide - Social Conversation App
+# 🚀 Deployment Guide - Innerwork
 
-This guide will help you deploy your Social Conversation App online so you can access it from any device.
+This guide will help you deploy Innerwork online so you can access it from any device.
 
 ## 📋 Prerequisites
 
@@ -45,7 +45,7 @@ This guide will help you deploy your Social Conversation App online so you can a
      OPENROUTER_API_KEY=your-openrouter-api-key
      OPENROUTER_MODEL=openai/gpt-4o-mini
      OPENROUTER_SITE_URL=https://your-app.vercel.app
-     OPENROUTER_APP_NAME=StoryConnect
+     OPENROUTER_APP_NAME=Innerwork
      FRONTEND_URL=https://your-app.vercel.app
      ```
 
@@ -97,7 +97,7 @@ JWT_SECRET=your-super-secret-jwt-key-here
 OPENROUTER_API_KEY=your-openrouter-api-key
 OPENROUTER_MODEL=openai/gpt-4o-mini
 OPENROUTER_SITE_URL=https://your-app.vercel.app
-OPENROUTER_APP_NAME=StoryConnect
+OPENROUTER_APP_NAME=Innerwork
 FRONTEND_URL=https://your-app.vercel.app
 ```
 
@@ -157,7 +157,7 @@ To update your deployed app:
 
 ## 🎉 You're Done!
 
-Your Social Conversation App is now live and accessible from anywhere! Share the Vercel URL with friends and family to try it out.
+Innerwork is now live and accessible from anywhere! Share the Vercel URL with friends and family to try it out.
 
 
 

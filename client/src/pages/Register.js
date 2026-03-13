@@ -80,7 +80,7 @@ const Register = () => {
             </div>
           </div>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Join StoryConnect
+            Join Innerwork
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Start your journey to better conversations

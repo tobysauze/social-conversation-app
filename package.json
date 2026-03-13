@@ -1,7 +1,7 @@
 {
-  "name": "social-conversation-app",
+  "name": "innerwork",
   "version": "1.0.0",
-  "description": "An app to help socially shy people develop conversation skills through storytelling",
+  "description": "Personal growth, journaling, and relationship building",
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
@@ -10,7 +10,7 @@
     "build": "cd client && npm run build",
     "install-all": "npm install && cd server && npm install && cd ../client && npm install"
   },
-  "keywords": ["social", "conversation", "storytelling", "journal", "ai"],
+  "keywords": ["personal-growth", "journal", "wellness", "relationships", "ai"],
   "author": "Toby Sauze",
   "license": "MIT",
   "devDependencies": {

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: social-conversation-backend
+    name: innerwork-backend
     env: node
     plan: free
     buildCommand: cd server && npm install --include=dev && npx prisma generate && npx prisma db push --skip-generate

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# StoryConnect App Launcher
-# This script starts the StoryConnect social conversation skills app
+# Innerwork App Launcher
+# This script starts the Innerwork app
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,7 +28,7 @@ kill_port() {
 }
 
 # Check and kill existing processes
-echo "🚀 Starting StoryConnect App..."
+echo "🚀 Starting Innerwork..."
 echo "📋 Checking for existing processes..."
 
 if check_port 3000; then
@@ -45,7 +45,7 @@ fi
 sleep 3
 
 # Start the application
-echo "🎯 Launching StoryConnect..."
+echo "🎯 Launching Innerwork..."
 echo "📱 Frontend will be available at: http://localhost:3000"
 echo "🔧 Backend will be available at: http://localhost:5001"
 echo ""

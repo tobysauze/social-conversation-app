@@ -7,7 +7,7 @@ const Profile = () => {
   const [user, setUser] = useState({
     name: 'Toby',
     email: 'toby@example.com',
-    bio: 'Working on improving my social conversation skills through storytelling and practice.',
+    bio: 'Working on personal growth, self-awareness, and building better relationships.',
     interests: ['Technology', 'Coffee', 'Reading', 'Hiking'],
     goals: ['Make new friends', 'Improve small talk', 'Build confidence']
   });

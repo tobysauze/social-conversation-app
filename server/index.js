@@ -172,7 +172,7 @@ app.use('*', (req, res) => {
 // Start server immediately, initialize database in background
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📝 Social Conversation App API ready!`);
+  console.log(`📝 Innerwork API ready!`);
   console.log(`🌐 Health check available at: http://0.0.0.0:${PORT}/api/health`);
   if (prisma) {
     console.log('✅ Prisma ready for Postgres');

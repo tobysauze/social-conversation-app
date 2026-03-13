@@ -1,7 +1,7 @@
 {
-  "name": "social-conversation-client",
+  "name": "innerwork-client",
   "version": "1.0.0",
-  "description": "Frontend client for social conversation app",
+  "description": "Frontend client for Innerwork",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",
