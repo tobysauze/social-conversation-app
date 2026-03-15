@@ -35,30 +35,30 @@ const Navbar = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Journal', href: '/journal', icon: BookOpen },
-    { name: 'Dream Diary', href: '/dreams', icon: Moon },
-    { name: 'Stories', href: '/stories', icon: MessageSquare },
-    { name: 'Practice', href: '/practice', icon: Play },
-    { name: 'People', href: '/people', icon: Users },
-    { name: 'Jokes', href: '/jokes', icon: Laugh },
     { name: 'Wellness', href: '/wellness', icon: Heart },
-    { name: 'Coach', href: '/coach', icon: Brain },
-    { name: 'Identity', href: '/identity', icon: User },
-    { name: 'Goals', href: '/goals', icon: TargetIcon },
-    { name: 'Genome', href: '/genome', icon: Dna },
+    { name: 'Protocols', href: '/protocols', icon: ClipboardList },
     { name: 'AI Chat', href: '/chat', icon: Bot },
     { name: 'Triggers', href: '/triggers', icon: AlertTriangle },
     { name: 'Beliefs', href: '/beliefs', icon: BookOpen },
-    { name: 'Protocols', href: '/protocols', icon: ClipboardList },
-    { name: 'Dating', href: '/dating', icon: HeartHandshake }
+    { name: 'Goals', href: '/goals', icon: TargetIcon },
+    { name: 'Identity', href: '/identity', icon: User },
+    { name: 'People', href: '/people', icon: Users },
+    { name: 'Dream Diary', href: '/dreams', icon: Moon },
+    { name: 'Coach', href: '/coach', icon: Brain },
+    { name: 'Dating', href: '/dating', icon: HeartHandshake },
+    { name: 'Stories', href: '/stories', icon: MessageSquare },
+    { name: 'Practice', href: '/practice', icon: Play },
+    { name: 'Jokes', href: '/jokes', icon: Laugh },
+    { name: 'Genome', href: '/genome', icon: Dna }
   ];
 
   const primaryNav = useMemo(() => {
-    const primary = new Set(['Home', 'Journal', 'Dream Diary', 'Stories', 'Practice', 'People', 'AI Chat']);
+    const primary = new Set(['Home', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
     return navigation.filter((i) => primary.has(i.name));
   }, [navigation]);
 
   const moreNav = useMemo(() => {
-    const primary = new Set(['Home', 'Journal', 'Dream Diary', 'Stories', 'Practice', 'People', 'AI Chat']);
+    const primary = new Set(['Home', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
     return navigation.filter((i) => !primary.has(i.name));
   }, [navigation]);
 
