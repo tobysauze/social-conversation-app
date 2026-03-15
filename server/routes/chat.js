@@ -476,7 +476,6 @@ router.get('/person/:personId/pins', authenticateToken, async (req, res) => {
       orderBy: { pinnedAt: 'desc' },
       include: {
         message: {
-          select: { id: true, role: true, content: true, createdAt: true },
           include: {
             conversation: {
               select: { id: true, title: true }
