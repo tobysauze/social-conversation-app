@@ -1,307 +1,566 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { journalAPI, storiesAPI, practiceAPI } from '../services/api';
-import { 
-  BookOpen, 
-  MessageSquare, 
-  Play, 
-  Plus, 
-  TrendingUp,
+import { dayplanAPI } from '../services/api';
+import {
   Clock,
-  Star,
-  ArrowRight,
-  Calendar,
-  Target
+  Plus,
+  Trash2,
+  Check,
+  Edit3,
+  Save,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  Settings,
+  X,
+  Timer,
+  Target,
+  Zap
 } from 'lucide-react';
-import { format } from 'date-fns';
+import toast from 'react-hot-toast';
+
+function addMinutes(timeStr, minutes) {
+  const [h, m] = timeStr.split(':').map(Number);
+  const total = h * 60 + m + minutes;
+  const hh = Math.floor(total / 60) % 24;
+  const mm = total % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+function formatTime12h(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+function formatMinutes(mins) {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function enrichItems(items, startTime) {
+  let currentTime = startTime;
+  return items.map((item) => {
+    const scheduledTime = currentTime;
+    const mins = item.actual_minutes ?? item.planned_minutes;
+    currentTime = addMinutes(currentTime, mins);
+    return { ...item, scheduled_time: scheduledTime, end_time: currentTime };
+  });
+}
 
 const Home = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState({
-    recentEntries: 0,
-    totalStories: 0,
-    practiceSessions: 0,
-    avgRating: 0
-  });
-  const [recentEntries, setRecentEntries] = useState([]);
-  const [recentStories, setRecentStories] = useState([]);
+  const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editValues, setEditValues] = useState({});
+  const [editingStartTime, setEditingStartTime] = useState(false);
+  const [startTimeInput, setStartTimeInput] = useState('');
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemMinutes, setNewItemMinutes] = useState(30);
+  const [showTemplateSettings, setShowTemplateSettings] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
+  const loadPlan = useCallback(async () => {
     try {
-      const [entriesResponse, storiesResponse, practiceResponse] = await Promise.all([
-        journalAPI.getEntries(1, 3),
-        storiesAPI.getStories(1, 3),
-        practiceAPI.getStats()
-      ]);
-
-      setRecentEntries(entriesResponse.data.entries || []);
-      setRecentStories(storiesResponse.data.stories || []);
-      setStats({
-        recentEntries: entriesResponse.data.entries?.length || 0,
-        totalStories: storiesResponse.data.stories?.length || 0,
-        practiceSessions: practiceResponse.data.stats?.totalSessions || 0,
-        avgRating: practiceResponse.data.stats?.avgRating || 0
-      });
+      const response = await dayplanAPI.getPlan();
+      setPlan(response.data.plan);
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('Error loading day plan:', error);
+      toast.error('Failed to load day plan');
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadPlan();
+  }, [loadPlan]);
+
+  const handleUpdateStartTime = async () => {
+    if (!startTimeInput) return;
+    setSaving(true);
+    try {
+      await dayplanAPI.updateStartTime(startTimeInput);
+      await loadPlan();
+      setEditingStartTime(false);
+      toast.success('Start time updated');
+    } catch {
+      toast.error('Failed to update start time');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const quickActions = [
-    {
-      title: 'Write Journal Entry',
-      description: 'Capture your thoughts and experiences',
-      icon: BookOpen,
-      href: '/journal',
-      color: 'from-blue-500 to-blue-600',
-      bgColor: 'bg-blue-50',
-      iconColor: 'text-blue-600'
-    },
-    {
-      title: 'View Stories',
-      description: 'Browse your conversation stories',
-      icon: MessageSquare,
-      href: '/stories',
-      color: 'from-purple-500 to-purple-600',
-      bgColor: 'bg-purple-50',
-      iconColor: 'text-purple-600'
-    },
-    {
-      title: 'Practice Mode',
-      description: 'Rehearse your stories with AI',
-      icon: Play,
-      href: '/practice',
-      color: 'from-green-500 to-green-600',
-      bgColor: 'bg-green-50',
-      iconColor: 'text-green-600'
+  const handleToggleComplete = async (item) => {
+    try {
+      const newCompleted = !item.completed;
+      const data = { completed: newCompleted };
+      if (newCompleted && item.actual_minutes === null) {
+        data.actual_minutes = item.planned_minutes;
+      }
+      await dayplanAPI.updateItem(item.id, data);
+      await loadPlan();
+    } catch {
+      toast.error('Failed to update item');
     }
-  ];
+  };
+
+  const handleStartEditing = (item) => {
+    setEditingItemId(item.id);
+    setEditValues({
+      title: item.title,
+      planned_minutes: item.planned_minutes,
+      actual_minutes: item.actual_minutes ?? ''
+    });
+  };
+
+  const handleSaveItem = async (itemId) => {
+    setSaving(true);
+    try {
+      const data = {
+        title: editValues.title,
+        planned_minutes: Number(editValues.planned_minutes)
+      };
+      if (editValues.actual_minutes !== '') {
+        data.actual_minutes = Number(editValues.actual_minutes);
+      }
+      await dayplanAPI.updateItem(itemId, data);
+      await loadPlan();
+      setEditingItemId(null);
+      toast.success('Item updated');
+    } catch {
+      toast.error('Failed to update item');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!newItemTitle.trim()) return;
+    setSaving(true);
+    try {
+      await dayplanAPI.addItem({ title: newItemTitle.trim(), planned_minutes: Number(newItemMinutes) });
+      await loadPlan();
+      setNewItemTitle('');
+      setNewItemMinutes(30);
+      setShowAddItem(false);
+      toast.success('Item added');
+    } catch {
+      toast.error('Failed to add item');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    try {
+      await dayplanAPI.deleteItem(itemId);
+      await loadPlan();
+      toast.success('Item removed');
+    } catch {
+      toast.error('Failed to remove item');
+    }
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (!plan) return;
+    setSaving(true);
+    try {
+      await dayplanAPI.updateTemplate({
+        default_start_time: plan.start_time,
+        items: plan.items.map((item, idx) => ({
+          title: item.title,
+          default_minutes: item.planned_minutes,
+          sort_order: idx
+        }))
+      });
+      toast.success('Saved as default template');
+      setShowTemplateSettings(false);
+    } catch {
+      toast.error('Failed to save template');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetToTemplate = async () => {
+    setSaving(true);
+    try {
+      const tmplRes = await dayplanAPI.getTemplate();
+      const tmpl = tmplRes.data.template;
+      await dayplanAPI.updateStartTime(tmpl.default_start_time);
+      for (const item of plan.items) {
+        await dayplanAPI.deleteItem(item.id);
+      }
+      for (const item of tmpl.items) {
+        await dayplanAPI.addItem({ title: item.title, planned_minutes: item.default_minutes });
+      }
+      await loadPlan();
+      toast.success('Reset to template');
+      setShowTemplateSettings(false);
+    } catch {
+      toast.error('Failed to reset');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded-lg"></div>
-            ))}
-          </div>
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
+          <div className="h-16 bg-gray-200 rounded mb-4"></div>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-14 bg-gray-200 rounded mb-3"></div>
+          ))}
         </div>
       </div>
     );
   }
 
+  const items = plan ? enrichItems(plan.items, plan.start_time) : [];
+  const totalPlanned = plan?.total_planned_minutes || 0;
+  const totalActual = plan?.total_actual_minutes || 0;
+  const completedCount = plan?.completed_count || 0;
+  const totalCount = plan?.total_count || 0;
+  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  const currentTimeStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  let activeIndex = -1;
+  for (let i = 0; i < items.length; i++) {
+    if (!items[i].completed && items[i].scheduled_time <= currentTimeStr) {
+      activeIndex = i;
+    }
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Welcome Section */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Welcome back, {user?.name}! 👋
-        </h1>
-        <p className="text-gray-600">
-          Ready to turn your experiences into engaging conversations?
-        </p>
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Day Plan
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowTemplateSettings(!showTemplateSettings)}
+          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Template settings"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="card">
-          <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <BookOpen className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Recent Entries</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.recentEntries}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <MessageSquare className="w-6 h-6 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Stories</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalStories}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Play className="w-6 h-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Practice Sessions</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.practiceSessions}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <Star className="w-6 h-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Avg Rating</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.avgRating ? stats.avgRating.toFixed(1) : '0.0'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Link
-                key={action.title}
-                to={action.href}
-                className={`${action.bgColor} rounded-xl p-6 hover:shadow-md transition-all duration-200 group`}
-              >
-                <div className="flex items-center mb-4">
-                  <div className={`p-3 bg-gradient-to-r ${action.color} rounded-lg`}>
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 ml-auto group-hover:text-gray-600 transition-colors" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {action.title}
-                </h3>
-                <p className="text-gray-600 text-sm">
-                  {action.description}
-                </p>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Recent Journal Entries */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Journal Entries</h2>
-            <Link
-              to="/journal"
-              className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center"
+      {/* Template Settings Dropdown */}
+      {showTemplateSettings && (
+        <div className="card mb-4 border border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Template Settings</h3>
+          <div className="flex gap-3">
+            <button
+              onClick={handleSaveAsTemplate}
+              disabled={saving}
+              className="btn-primary text-sm flex items-center gap-1"
             >
-              View all
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </Link>
+              <Save className="w-4 h-4" />
+              Save current as default
+            </button>
+            <button
+              onClick={handleResetToTemplate}
+              disabled={saving}
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset to default
+            </button>
           </div>
-          
-          {recentEntries.length > 0 ? (
-            <div className="space-y-4">
-              {recentEntries.map((entry) => (
-                <div key={entry.id} className="border-l-4 border-primary-200 pl-4 py-2">
-                  <p className="text-sm text-gray-600 mb-1">
-                    {format(new Date(entry.created_at), 'MMM d, yyyy')}
-                  </p>
-                  <p className="text-gray-900 text-sm line-clamp-2">
-                    {entry.content.substring(0, 100)}
-                    {entry.content.length > 100 && '...'}
-                  </p>
-                </div>
-              ))}
+        </div>
+      )}
+
+      {/* Progress & Summary */}
+      <div className="card mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <Target className="w-4 h-4 text-indigo-500" />
+              <span><strong>{completedCount}</strong>/{totalCount} done</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <Timer className="w-4 h-4 text-green-500" />
+              <span>{formatMinutes(totalPlanned)} planned</span>
+            </div>
+            {totalActual > 0 && (
+              <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <span>{formatMinutes(totalActual)} actual</span>
+              </div>
+            )}
+          </div>
+          <span className="text-sm font-semibold text-indigo-600">{progress}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-indigo-500 h-2 rounded-full transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+      </div>
+
+      {/* Start Time */}
+      <div className="card mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-500" />
+            <span className="text-sm font-medium text-gray-700">Day starts at</span>
+          </div>
+          {editingStartTime ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={startTimeInput}
+                onChange={(e) => setStartTimeInput(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              <button
+                onClick={handleUpdateStartTime}
+                disabled={saving}
+                className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setEditingStartTime(false)}
+                className="p-1.5 text-gray-400 hover:bg-gray-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">No journal entries yet</p>
-              <Link
-                to="/journal"
-                className="btn-primary inline-flex items-center"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Write your first entry
-              </Link>
-            </div>
+            <button
+              onClick={() => { setEditingStartTime(true); setStartTimeInput(plan?.start_time || '08:00'); }}
+              className="text-lg font-semibold text-gray-900 hover:text-indigo-600 transition-colors cursor-pointer"
+            >
+              {plan ? formatTime12h(plan.start_time) : '8:00 AM'}
+            </button>
           )}
         </div>
+      </div>
 
-        {/* Recent Stories */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Stories</h2>
-            <Link
-              to="/stories"
-              className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center"
+      {/* Items List */}
+      <div className="space-y-2 mb-4">
+        {items.map((item, idx) => {
+          const isEditing = editingItemId === item.id;
+          const isActive = idx === activeIndex;
+          const timeDiff = item.actual_minutes !== null && item.actual_minutes !== undefined
+            ? item.actual_minutes - item.planned_minutes
+            : null;
+
+          return (
+            <div
+              key={item.id}
+              className={`card transition-all duration-200 ${
+                item.completed
+                  ? 'bg-gray-50 border-gray-200'
+                  : isActive
+                    ? 'border-indigo-300 bg-indigo-50 shadow-sm ring-1 ring-indigo-200'
+                    : 'border-gray-200'
+              }`}
             >
-              View all
-              <ArrowRight className="w-4 h-4 ml-1" />
-            </Link>
-          </div>
-          
-          {recentStories.length > 0 ? (
-            <div className="space-y-4">
-              {recentStories.map((story) => (
-                <div key={story.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-medium text-gray-900">{story.title}</h3>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      story.tone === 'funny' ? 'bg-yellow-100 text-yellow-800' :
-                      story.tone === 'thoughtful' ? 'bg-blue-100 text-blue-800' :
-                      story.tone === 'casual' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
+              {isEditing ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={editValues.title}
+                    onChange={(e) => setEditValues({ ...editValues, title: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Item title"
+                  />
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 block mb-1">Planned (min)</label>
+                      <input
+                        type="number"
+                        value={editValues.planned_minutes}
+                        onChange={(e) => setEditValues({ ...editValues, planned_minutes: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500"
+                        min="1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 block mb-1">Actual (min)</label>
+                      <input
+                        type="number"
+                        value={editValues.actual_minutes}
+                        onChange={(e) => setEditValues({ ...editValues, actual_minutes: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500"
+                        placeholder="—"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setEditingItemId(null)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleSaveItem(item.id)}
+                      disabled={saving}
+                      className="btn-primary text-sm flex items-center gap-1"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  {/* Checkbox */}
+                  <button
+                    onClick={() => handleToggleComplete(item)}
+                    className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                      item.completed
+                        ? 'bg-green-500 border-green-500 text-white'
+                        : 'border-gray-300 hover:border-indigo-400'
+                    }`}
+                  >
+                    {item.completed && <Check className="w-3.5 h-3.5" />}
+                  </button>
+
+                  {/* Time indicator */}
+                  <div className="flex-shrink-0 w-20 text-right">
+                    <span className={`text-sm font-mono ${
+                      item.completed ? 'text-gray-400' : isActive ? 'text-indigo-700 font-semibold' : 'text-gray-600'
                     }`}>
-                      {story.tone}
+                      {formatTime12h(item.scheduled_time)}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 mb-2">
-                    {story.content.substring(0, 80)}
-                    {story.content.length > 80 && '...'}
-                  </p>
-                  <div className="flex items-center text-xs text-gray-500">
-                    <Clock className="w-3 h-3 mr-1" />
-                    {story.duration_seconds}s
-                    {story.times_told > 0 && (
-                      <>
-                        <span className="mx-2">•</span>
-                        <Target className="w-3 h-3 mr-1" />
-                        Told {story.times_told} times
-                      </>
-                    )}
+
+                  {/* Title & duration */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${
+                      item.completed ? 'text-gray-400 line-through' : 'text-gray-900'
+                    }`}>
+                      {item.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-400">
+                        {formatMinutes(item.planned_minutes)}
+                      </span>
+                      {item.actual_minutes !== null && item.actual_minutes !== undefined && (
+                        <>
+                          <span className="text-xs text-gray-300">&rarr;</span>
+                          <span className={`text-xs font-medium ${
+                            timeDiff > 0 ? 'text-red-500' : timeDiff < 0 ? 'text-green-500' : 'text-gray-500'
+                          }`}>
+                            {formatMinutes(item.actual_minutes)}
+                            {timeDiff !== 0 && (
+                              <span className="ml-1">
+                                ({timeDiff > 0 ? '+' : ''}{timeDiff}m)
+                              </span>
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleStartEditing(item)}
+                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                      title="Edit"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteItem(item.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      title="Remove"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">No stories created yet</p>
-              <Link
-                to="/journal"
-                className="btn-primary inline-flex items-center"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create your first story
-              </Link>
-            </div>
-          )}
-        </div>
+          );
+        })}
       </div>
+
+      {/* End Time */}
+      {items.length > 0 && (
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-4">
+          <ChevronDown className="w-4 h-4" />
+          <span>Day ends at <strong className="text-gray-700">{plan ? formatTime12h(addMinutes(plan.start_time, totalPlanned)) : ''}</strong></span>
+        </div>
+      )}
+
+      {/* Add Item */}
+      {showAddItem ? (
+        <div className="card border border-dashed border-indigo-300 bg-indigo-50/50">
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={newItemTitle}
+              onChange={(e) => setNewItemTitle(e.target.value)}
+              placeholder="What do you need to do?"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+            />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">Duration:</label>
+                <input
+                  type="number"
+                  value={newItemMinutes}
+                  onChange={(e) => setNewItemMinutes(e.target.value)}
+                  className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                  min="1"
+                />
+                <span className="text-xs text-gray-400">min</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowAddItem(false); setNewItemTitle(''); setNewItemMinutes(30); }}
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddItem}
+                  disabled={saving || !newItemTitle.trim()}
+                  className="btn-primary text-sm"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAddItem(true)}
+          className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2 text-sm"
+        >
+          <Plus className="w-4 h-4" />
+          Add item
+        </button>
+      )}
     </div>
   );
 };
 
 export default Home;
-

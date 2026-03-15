@@ -247,4 +247,15 @@ export const genomeAPI = {
   downloadUrl: (id) => `${API_BASE_URL}/genome/${id}/download`
 };
 
+// Day Plan API
+export const dayplanAPI = {
+  getTemplate: () => api.get('/dayplan/template'),
+  updateTemplate: (data) => api.put('/dayplan/template', data),
+  getPlan: (date) => api.get(`/dayplan${date ? `?date=${date}` : ''}`),
+  updateStartTime: (start_time, date) => api.patch('/dayplan/start-time', { start_time, date }),
+  updateItem: (itemId, data) => api.patch(`/dayplan/items/${itemId}`, data),
+  addItem: (data) => api.post('/dayplan/items', data),
+  deleteItem: (itemId) => api.delete(`/dayplan/items/${itemId}`)
+};
+
 export default api;

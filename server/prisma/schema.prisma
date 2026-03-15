@@ -31,6 +31,8 @@ model User {
   conversationStarters ConversationStarter[]
   aiConversations      AiConversation[]
   healthIntakeEvents   HealthIntakeEvent[]
+  dayPlanTemplate      DayPlanTemplate?
+  dayPlans             DayPlan[]
 }
 
 model JournalEntry {
@@ -320,4 +322,54 @@ model HealthIntakeEvent {
   @@map("health_intake_events")
 }
 
+model DayPlanTemplate {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  defaultStartTime String @default("08:00") @map("default_start_time")
+  items          DayPlanTemplateItem[]
+  user           User     @relation(fields: [userId], references: [id])
+  dayPlans       DayPlan[]
 
+  @@unique([userId])
+  @@map("day_plan_templates")
+}
+
+model DayPlanTemplateItem {
+  id             Int      @id @default(autoincrement())
+  templateId     Int      @map("template_id")
+  title          String
+  defaultMinutes Int      @default(30) @map("default_minutes")
+  sortOrder      Int      @default(0) @map("sort_order")
+  template       DayPlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("day_plan_template_items")
+}
+
+model DayPlan {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  date        DateTime @db.Date
+  startTime   String   @map("start_time")
+  templateId  Int?     @map("template_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id])
+  template    DayPlanTemplate? @relation(fields: [templateId], references: [id])
+  items       DayPlanItem[]
+
+  @@unique([userId, date])
+  @@map("day_plans")
+}
+
+model DayPlanItem {
+  id             Int      @id @default(autoincrement())
+  dayPlanId      Int      @map("day_plan_id")
+  title          String
+  plannedMinutes Int      @map("planned_minutes")
+  actualMinutes  Int?     @map("actual_minutes")
+  completed      Boolean  @default(false)
+  sortOrder      Int      @default(0) @map("sort_order")
+  dayPlan        DayPlan  @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
+
+  @@map("day_plan_items")
+}
