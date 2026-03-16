@@ -10,25 +10,18 @@ import {
   Save,
   RotateCcw,
   ChevronDown,
-  ChevronUp,
   Settings,
   X,
   Timer,
   Target,
   Zap,
-  Repeat
+  Repeat,
+  MapPin
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-function addMinutes(timeStr, minutes) {
-  const [h, m] = timeStr.split(':').map(Number);
-  const total = h * 60 + m + minutes;
-  const hh = Math.floor(total / 60) % 24;
-  const mm = total % 60;
-  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-}
-
 function formatTime12h(timeStr) {
+  if (!timeStr) return '';
   const [h, m] = timeStr.split(':').map(Number);
   const period = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
@@ -40,16 +33,6 @@ function formatMinutes(mins) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-function enrichItems(items, startTime) {
-  let currentTime = startTime;
-  return items.map((item) => {
-    const scheduledTime = currentTime;
-    const mins = item.actual_minutes ?? item.planned_minutes;
-    currentTime = addMinutes(currentTime, mins);
-    return { ...item, scheduled_time: scheduledTime, end_time: currentTime };
-  });
 }
 
 const Home = () => {
@@ -64,6 +47,7 @@ const Home = () => {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemMinutes, setNewItemMinutes] = useState(30);
   const [newItemRecurring, setNewItemRecurring] = useState(false);
+  const [newItemStartAt, setNewItemStartAt] = useState('');
   const [showTemplateSettings, setShowTemplateSettings] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -117,7 +101,8 @@ const Home = () => {
     setEditValues({
       title: item.title,
       planned_minutes: item.planned_minutes,
-      actual_minutes: item.actual_minutes ?? ''
+      actual_minutes: item.actual_minutes ?? '',
+      start_at: item.start_at || ''
     });
   };
 
@@ -126,7 +111,8 @@ const Home = () => {
     try {
       const data = {
         title: editValues.title,
-        planned_minutes: Number(editValues.planned_minutes)
+        planned_minutes: Number(editValues.planned_minutes),
+        start_at: editValues.start_at || null
       };
       if (editValues.actual_minutes !== '') {
         data.actual_minutes = Number(editValues.actual_minutes);
@@ -149,12 +135,14 @@ const Home = () => {
       await dayplanAPI.addItem({
         title: newItemTitle.trim(),
         planned_minutes: Number(newItemMinutes),
-        is_recurring: newItemRecurring
+        is_recurring: newItemRecurring,
+        start_at: newItemStartAt || null
       });
       await loadPlan();
       setNewItemTitle('');
       setNewItemMinutes(30);
       setNewItemRecurring(false);
+      setNewItemStartAt('');
       setShowAddItem(false);
       toast.success(newItemRecurring ? 'Daily item added' : 'Item added');
     } catch {
@@ -194,6 +182,7 @@ const Home = () => {
         items: plan.items.map((item, idx) => ({
           title: item.title,
           default_minutes: item.planned_minutes,
+          start_at: item.start_at || null,
           sort_order: idx
         }))
       });
@@ -216,7 +205,11 @@ const Home = () => {
         await dayplanAPI.deleteItem(item.id);
       }
       for (const item of tmpl.items) {
-        await dayplanAPI.addItem({ title: item.title, planned_minutes: item.default_minutes });
+        await dayplanAPI.addItem({
+          title: item.title,
+          planned_minutes: item.default_minutes,
+          start_at: item.start_at || null
+        });
       }
       await loadPlan();
       toast.success('Reset to template');
@@ -242,7 +235,7 @@ const Home = () => {
     );
   }
 
-  const items = plan ? enrichItems(plan.items, plan.start_time) : [];
+  const items = plan?.items || [];
   const totalPlanned = plan?.total_planned_minutes || 0;
   const totalActual = plan?.total_actual_minutes || 0;
   const completedCount = plan?.completed_count || 0;
@@ -262,9 +255,7 @@ const Home = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Day Plan
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">Day Plan</h1>
           <p className="text-sm text-gray-500 mt-1">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
@@ -306,7 +297,7 @@ const Home = () => {
       {/* Progress & Summary */}
       <div className="card mb-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 text-sm text-gray-600">
               <Target className="w-4 h-4 text-indigo-500" />
               <span><strong>{completedCount}</strong>/{totalCount} done</span>
@@ -423,6 +414,27 @@ const Home = () => {
                         min="0"
                       />
                     </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 block mb-1">Start at</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="time"
+                          value={editValues.start_at}
+                          onChange={(e) => setEditValues({ ...editValues, start_at: e.target.value })}
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {editValues.start_at && (
+                          <button
+                            type="button"
+                            onClick={() => setEditValues({ ...editValues, start_at: '' })}
+                            className="p-1 text-gray-400 hover:text-red-500"
+                            title="Remove fixed time"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
@@ -457,11 +469,16 @@ const Home = () => {
 
                   {/* Time indicator */}
                   <div className="flex-shrink-0 w-20 text-right">
-                    <span className={`text-sm font-mono ${
-                      item.completed ? 'text-gray-400' : isActive ? 'text-indigo-700 font-semibold' : 'text-gray-600'
-                    }`}>
-                      {formatTime12h(item.scheduled_time)}
-                    </span>
+                    <div className="flex items-center justify-end gap-1">
+                      {item.start_at && (
+                        <MapPin className="w-3 h-3 text-amber-500" title="Fixed time" />
+                      )}
+                      <span className={`text-sm font-mono ${
+                        item.completed ? 'text-gray-400' : isActive ? 'text-indigo-700 font-semibold' : 'text-gray-600'
+                      }`}>
+                        {formatTime12h(item.scheduled_time)}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Title & duration */}
@@ -534,10 +551,10 @@ const Home = () => {
       </div>
 
       {/* End Time */}
-      {items.length > 0 && (
+      {items.length > 0 && plan?.end_time_display && (
         <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-4">
           <ChevronDown className="w-4 h-4" />
-          <span>Day ends at <strong className="text-gray-700">{plan ? formatTime12h(addMinutes(plan.start_time, totalPlanned)) : ''}</strong></span>
+          <span>Day ends at <strong className="text-gray-700">{plan.end_time_display}</strong></span>
         </div>
       )}
 
@@ -554,7 +571,7 @@ const Home = () => {
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
             />
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-gray-500">Duration:</label>
                 <input
@@ -565,6 +582,25 @@ const Home = () => {
                   min="1"
                 />
                 <span className="text-xs text-gray-400">min</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">Start at:</label>
+                <input
+                  type="time"
+                  value={newItemStartAt}
+                  onChange={(e) => setNewItemStartAt(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+                {newItemStartAt && (
+                  <button
+                    type="button"
+                    onClick={() => setNewItemStartAt('')}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                    title="Remove fixed time"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -580,13 +616,17 @@ const Home = () => {
               </button>
             </div>
             <div className="flex items-center justify-between">
-              {newItemRecurring && (
-                <p className="text-xs text-indigo-600">This item will appear in your plan every day</p>
-              )}
-              {!newItemRecurring && <div />}
+              <div className="text-xs space-y-0.5">
+                {newItemStartAt && (
+                  <p className="text-amber-600">Pinned to {formatTime12h(newItemStartAt)}</p>
+                )}
+                {newItemRecurring && (
+                  <p className="text-indigo-600">Repeats every day</p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowAddItem(false); setNewItemTitle(''); setNewItemMinutes(30); setNewItemRecurring(false); }}
+                  onClick={() => { setShowAddItem(false); setNewItemTitle(''); setNewItemMinutes(30); setNewItemRecurring(false); setNewItemStartAt(''); }}
                   className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
                 >
                   Cancel

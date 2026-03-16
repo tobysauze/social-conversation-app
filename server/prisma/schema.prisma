@@ -339,6 +339,7 @@ model DayPlanTemplateItem {
   templateId     Int      @map("template_id")
   title          String
   defaultMinutes Int      @default(30) @map("default_minutes")
+  startAt        String?  @map("start_at")
   sortOrder      Int      @default(0) @map("sort_order")
   template       DayPlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -369,6 +370,7 @@ model DayPlanItem {
   actualMinutes  Int?     @map("actual_minutes")
   completed      Boolean  @default(false)
   isRecurring    Boolean  @default(false) @map("is_recurring")
+  startAt        String?  @map("start_at")
   sortOrder      Int      @default(0) @map("sort_order")
   dayPlan        DayPlan  @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
 

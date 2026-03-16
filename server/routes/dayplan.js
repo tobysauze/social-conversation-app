@@ -8,12 +8,19 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function addMinutes(timeStr, minutes) {
+function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
-  const total = h * 60 + m + minutes;
+  return h * 60 + m;
+}
+
+function minutesToTime(total) {
   const hh = Math.floor(total / 60) % 24;
   const mm = total % 60;
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+function addMinutes(timeStr, minutes) {
+  return minutesToTime(timeToMinutes(timeStr) + minutes);
 }
 
 function formatTime12h(timeStr) {
@@ -23,24 +30,62 @@ function formatTime12h(timeStr) {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
 
-function enrichItems(items, startTime) {
-  let currentTime = startTime;
-  return items.map((item) => {
-    const scheduledTime = currentTime;
-    const mins = item.actualMinutes ?? item.plannedMinutes;
-    currentTime = addMinutes(currentTime, mins);
-    return {
-      id: item.id,
-      title: item.title,
-      planned_minutes: item.plannedMinutes,
-      actual_minutes: item.actualMinutes,
-      completed: item.completed,
-      is_recurring: item.isRecurring,
-      sort_order: item.sortOrder,
-      scheduled_time: scheduledTime,
-      scheduled_time_display: formatTime12h(scheduledTime)
-    };
+function enrichItems(items, dayStartTime) {
+  const sorted = [...items].sort((a, b) => {
+    const aTime = a.startAt ? timeToMinutes(a.startAt) : null;
+    const bTime = b.startAt ? timeToMinutes(b.startAt) : null;
+    if (aTime !== null && bTime !== null) return aTime - bTime;
+    if (aTime !== null && bTime === null) return 0;
+    if (aTime === null && bTime !== null) return 0;
+    return a.sortOrder - b.sortOrder;
   });
+
+  const pinned = sorted.filter((i) => i.startAt);
+  const unpinned = sorted.filter((i) => !i.startAt);
+
+  const result = [];
+  let currentTime = timeToMinutes(dayStartTime);
+  let pinnedIdx = 0;
+  let unpinnedIdx = 0;
+
+  while (pinnedIdx < pinned.length || unpinnedIdx < unpinned.length) {
+    if (pinnedIdx < pinned.length) {
+      const nextPinTime = timeToMinutes(pinned[pinnedIdx].startAt);
+
+      while (unpinnedIdx < unpinned.length && currentTime + unpinned[unpinnedIdx].plannedMinutes <= nextPinTime) {
+        const item = unpinned[unpinnedIdx];
+        const mins = item.actualMinutes ?? item.plannedMinutes;
+        result.push({ ...item, _scheduledTime: minutesToTime(currentTime) });
+        currentTime += mins;
+        unpinnedIdx++;
+      }
+
+      const pItem = pinned[pinnedIdx];
+      const pMins = pItem.actualMinutes ?? pItem.plannedMinutes;
+      result.push({ ...pItem, _scheduledTime: pItem.startAt });
+      currentTime = Math.max(currentTime, nextPinTime + pMins);
+      pinnedIdx++;
+    } else {
+      const item = unpinned[unpinnedIdx];
+      const mins = item.actualMinutes ?? item.plannedMinutes;
+      result.push({ ...item, _scheduledTime: minutesToTime(currentTime) });
+      currentTime += mins;
+      unpinnedIdx++;
+    }
+  }
+
+  return result.map((item) => ({
+    id: item.id,
+    title: item.title,
+    planned_minutes: item.plannedMinutes,
+    actual_minutes: item.actualMinutes,
+    completed: item.completed,
+    is_recurring: item.isRecurring,
+    start_at: item.startAt || null,
+    sort_order: item.sortOrder,
+    scheduled_time: item._scheduledTime,
+    scheduled_time_display: formatTime12h(item._scheduledTime)
+  }));
 }
 
 async function ensureTemplate(userId) {
@@ -55,7 +100,7 @@ async function ensureTemplate(userId) {
   return template;
 }
 
-async function addToTemplate(userId, title, minutes) {
+async function addToTemplate(userId, title, minutes, startAt) {
   const template = await ensureTemplate(userId);
   const existing = await prisma.dayPlanTemplateItem.findFirst({
     where: { templateId: template.id, title }
@@ -70,6 +115,7 @@ async function addToTemplate(userId, title, minutes) {
       templateId: template.id,
       title,
       defaultMinutes: minutes,
+      startAt: startAt || null,
       sortOrder: (maxOrder._max.sortOrder ?? -1) + 1
     }
   });
@@ -128,6 +174,7 @@ router.get('/template', authenticateToken, async (req, res) => {
           id: i.id,
           title: i.title,
           default_minutes: i.defaultMinutes,
+          start_at: i.startAt || null,
           sort_order: i.sortOrder
         }))
       }
@@ -165,6 +212,7 @@ router.put('/template', authenticateToken, async (req, res) => {
           templateId: template.id,
           title: item.title,
           defaultMinutes: item.default_minutes || 30,
+          startAt: item.start_at || null,
           sortOrder: item.sort_order ?? idx
         }))
       });
@@ -183,6 +231,7 @@ router.put('/template', authenticateToken, async (req, res) => {
           id: i.id,
           title: i.title,
           default_minutes: i.defaultMinutes,
+          start_at: i.startAt || null,
           sort_order: i.sortOrder
         }))
       }
@@ -223,6 +272,7 @@ router.get('/', authenticateToken, async (req, res) => {
               title: ti.title,
               plannedMinutes: ti.defaultMinutes,
               isRecurring: true,
+              startAt: ti.startAt || null,
               sortOrder: ti.sortOrder
             }))
           }
@@ -231,22 +281,29 @@ router.get('/', authenticateToken, async (req, res) => {
       });
     }
 
+    const enriched = enrichItems(plan.items, plan.startTime);
     const totalPlanned = plan.items.reduce((s, i) => s + i.plannedMinutes, 0);
     const totalActual = plan.items.reduce((s, i) => s + (i.actualMinutes ?? 0), 0);
     const completedCount = plan.items.filter((i) => i.completed).length;
+
+    let latestEnd = timeToMinutes(plan.startTime);
+    for (const item of enriched) {
+      const endMins = timeToMinutes(item.scheduled_time) + (item.actual_minutes ?? item.planned_minutes);
+      if (endMins > latestEnd) latestEnd = endMins;
+    }
 
     res.json({
       plan: {
         id: plan.id,
         date,
         start_time: plan.startTime,
-        items: enrichItems(plan.items, plan.startTime),
+        items: enriched,
         total_planned_minutes: totalPlanned,
         total_actual_minutes: totalActual,
         completed_count: completedCount,
         total_count: plan.items.length,
-        end_time: addMinutes(plan.startTime, totalPlanned),
-        end_time_display: formatTime12h(addMinutes(plan.startTime, totalPlanned))
+        end_time: minutesToTime(latestEnd),
+        end_time_display: formatTime12h(minutesToTime(latestEnd))
       }
     });
   } catch (e) {
@@ -281,7 +338,7 @@ router.patch('/start-time', authenticateToken, async (req, res) => {
 // Update a single day plan item (including recurring toggle)
 router.patch('/items/:itemId', authenticateToken, async (req, res) => {
   const itemId = Number(req.params.itemId);
-  const { planned_minutes, actual_minutes, completed, title, is_recurring } = req.body;
+  const { planned_minutes, actual_minutes, completed, title, is_recurring, start_at } = req.body;
 
   try {
     const item = await prisma.dayPlanItem.findFirst({
@@ -298,14 +355,16 @@ router.patch('/items/:itemId', authenticateToken, async (req, res) => {
     if (completed !== undefined) data.completed = Boolean(completed);
     if (title !== undefined) data.title = title;
     if (is_recurring !== undefined) data.isRecurring = Boolean(is_recurring);
+    if (start_at !== undefined) data.startAt = start_at || null;
 
     await prisma.dayPlanItem.update({ where: { id: itemId }, data });
 
     if (is_recurring !== undefined) {
       const itemTitle = title ?? item.title;
       const itemMinutes = planned_minutes != null ? Number(planned_minutes) : item.plannedMinutes;
+      const itemStartAt = start_at !== undefined ? (start_at || null) : item.startAt;
       if (is_recurring) {
-        await addToTemplate(req.user.userId, itemTitle, itemMinutes);
+        await addToTemplate(req.user.userId, itemTitle, itemMinutes, itemStartAt);
       } else {
         await removeFromTemplate(req.user.userId, itemTitle);
       }
@@ -321,7 +380,7 @@ router.patch('/items/:itemId', authenticateToken, async (req, res) => {
 // Add a new item to today's plan
 router.post('/items', authenticateToken, async (req, res) => {
   const date = req.body.date || todayDate();
-  const { title, planned_minutes = 30, is_recurring = false } = req.body;
+  const { title, planned_minutes = 30, is_recurring = false, start_at } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
 
   try {
@@ -338,12 +397,13 @@ router.post('/items', authenticateToken, async (req, res) => {
         title,
         plannedMinutes: Number(planned_minutes),
         isRecurring: Boolean(is_recurring),
+        startAt: start_at || null,
         sortOrder: maxOrder + 1
       }
     });
 
     if (is_recurring) {
-      await addToTemplate(req.user.userId, title, Number(planned_minutes));
+      await addToTemplate(req.user.userId, title, Number(planned_minutes), start_at || null);
     }
 
     res.status(201).json({
@@ -354,6 +414,7 @@ router.post('/items', authenticateToken, async (req, res) => {
         actual_minutes: item.actualMinutes,
         completed: item.completed,
         is_recurring: item.isRecurring,
+        start_at: item.startAt || null,
         sort_order: item.sortOrder
       }
     });
