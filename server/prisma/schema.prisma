@@ -368,6 +368,7 @@ model DayPlanItem {
   plannedMinutes Int      @map("planned_minutes")
   actualMinutes  Int?     @map("actual_minutes")
   completed      Boolean  @default(false)
+  isRecurring    Boolean  @default(false) @map("is_recurring")
   sortOrder      Int      @default(0) @map("sort_order")
   dayPlan        DayPlan  @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
 

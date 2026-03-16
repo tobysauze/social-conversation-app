@@ -35,10 +35,53 @@ function enrichItems(items, startTime) {
       planned_minutes: item.plannedMinutes,
       actual_minutes: item.actualMinutes,
       completed: item.completed,
+      is_recurring: item.isRecurring,
       sort_order: item.sortOrder,
       scheduled_time: scheduledTime,
       scheduled_time_display: formatTime12h(scheduledTime)
     };
+  });
+}
+
+async function ensureTemplate(userId) {
+  let template = await prisma.dayPlanTemplate.findUnique({
+    where: { userId }
+  });
+  if (!template) {
+    template = await prisma.dayPlanTemplate.create({
+      data: { userId, defaultStartTime: '08:00' }
+    });
+  }
+  return template;
+}
+
+async function addToTemplate(userId, title, minutes) {
+  const template = await ensureTemplate(userId);
+  const existing = await prisma.dayPlanTemplateItem.findFirst({
+    where: { templateId: template.id, title }
+  });
+  if (existing) return;
+  const maxOrder = await prisma.dayPlanTemplateItem.aggregate({
+    where: { templateId: template.id },
+    _max: { sortOrder: true }
+  });
+  await prisma.dayPlanTemplateItem.create({
+    data: {
+      templateId: template.id,
+      title,
+      defaultMinutes: minutes,
+      sortOrder: (maxOrder._max.sortOrder ?? -1) + 1
+    }
+  });
+}
+
+async function removeFromTemplate(userId, title) {
+  const template = await prisma.dayPlanTemplate.findUnique({
+    where: { userId }
+  });
+  if (!template) return;
+  await prisma.dayPlanTemplateItem.deleteMany({
+    where: { templateId: template.id, title }
   });
 }
 
@@ -179,6 +222,7 @@ router.get('/', authenticateToken, async (req, res) => {
             create: templateItems.map((ti) => ({
               title: ti.title,
               plannedMinutes: ti.defaultMinutes,
+              isRecurring: true,
               sortOrder: ti.sortOrder
             }))
           }
@@ -234,10 +278,10 @@ router.patch('/start-time', authenticateToken, async (req, res) => {
   }
 });
 
-// Update a single day plan item
+// Update a single day plan item (including recurring toggle)
 router.patch('/items/:itemId', authenticateToken, async (req, res) => {
   const itemId = Number(req.params.itemId);
-  const { planned_minutes, actual_minutes, completed, title } = req.body;
+  const { planned_minutes, actual_minutes, completed, title, is_recurring } = req.body;
 
   try {
     const item = await prisma.dayPlanItem.findFirst({
@@ -253,8 +297,20 @@ router.patch('/items/:itemId', authenticateToken, async (req, res) => {
     if (actual_minutes !== undefined) data.actualMinutes = actual_minutes === null ? null : Number(actual_minutes);
     if (completed !== undefined) data.completed = Boolean(completed);
     if (title !== undefined) data.title = title;
+    if (is_recurring !== undefined) data.isRecurring = Boolean(is_recurring);
 
     await prisma.dayPlanItem.update({ where: { id: itemId }, data });
+
+    if (is_recurring !== undefined) {
+      const itemTitle = title ?? item.title;
+      const itemMinutes = planned_minutes != null ? Number(planned_minutes) : item.plannedMinutes;
+      if (is_recurring) {
+        await addToTemplate(req.user.userId, itemTitle, itemMinutes);
+      } else {
+        await removeFromTemplate(req.user.userId, itemTitle);
+      }
+    }
+
     res.json({ message: 'Updated' });
   } catch (e) {
     console.error('Day plan item PATCH error:', e);
@@ -265,7 +321,7 @@ router.patch('/items/:itemId', authenticateToken, async (req, res) => {
 // Add a new item to today's plan
 router.post('/items', authenticateToken, async (req, res) => {
   const date = req.body.date || todayDate();
-  const { title, planned_minutes = 30 } = req.body;
+  const { title, planned_minutes = 30, is_recurring = false } = req.body;
   if (!title) return res.status(400).json({ error: 'title required' });
 
   try {
@@ -281,9 +337,14 @@ router.post('/items', authenticateToken, async (req, res) => {
         dayPlanId: plan.id,
         title,
         plannedMinutes: Number(planned_minutes),
+        isRecurring: Boolean(is_recurring),
         sortOrder: maxOrder + 1
       }
     });
+
+    if (is_recurring) {
+      await addToTemplate(req.user.userId, title, Number(planned_minutes));
+    }
 
     res.status(201).json({
       item: {
@@ -292,6 +353,7 @@ router.post('/items', authenticateToken, async (req, res) => {
         planned_minutes: item.plannedMinutes,
         actual_minutes: item.actualMinutes,
         completed: item.completed,
+        is_recurring: item.isRecurring,
         sort_order: item.sortOrder
       }
     });
@@ -311,6 +373,10 @@ router.delete('/items/:itemId', authenticateToken, async (req, res) => {
     });
     if (!item || item.dayPlan.userId !== req.user.userId) {
       return res.status(404).json({ error: 'Item not found' });
+    }
+
+    if (item.isRecurring) {
+      await removeFromTemplate(req.user.userId, item.title);
     }
 
     await prisma.dayPlanItem.delete({ where: { id: itemId } });

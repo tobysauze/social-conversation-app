@@ -15,7 +15,8 @@ import {
   X,
   Timer,
   Target,
-  Zap
+  Zap,
+  Repeat
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -62,6 +63,7 @@ const Home = () => {
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemMinutes, setNewItemMinutes] = useState(30);
+  const [newItemRecurring, setNewItemRecurring] = useState(false);
   const [showTemplateSettings, setShowTemplateSettings] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -144,16 +146,32 @@ const Home = () => {
     if (!newItemTitle.trim()) return;
     setSaving(true);
     try {
-      await dayplanAPI.addItem({ title: newItemTitle.trim(), planned_minutes: Number(newItemMinutes) });
+      await dayplanAPI.addItem({
+        title: newItemTitle.trim(),
+        planned_minutes: Number(newItemMinutes),
+        is_recurring: newItemRecurring
+      });
       await loadPlan();
       setNewItemTitle('');
       setNewItemMinutes(30);
+      setNewItemRecurring(false);
       setShowAddItem(false);
-      toast.success('Item added');
+      toast.success(newItemRecurring ? 'Daily item added' : 'Item added');
     } catch {
       toast.error('Failed to add item');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleRecurring = async (item) => {
+    try {
+      const newRecurring = !item.is_recurring;
+      await dayplanAPI.updateItem(item.id, { is_recurring: newRecurring });
+      await loadPlan();
+      toast.success(newRecurring ? 'Now repeats daily' : 'No longer repeats daily');
+    } catch {
+      toast.error('Failed to update');
     }
   };
 
@@ -448,11 +466,16 @@ const Home = () => {
 
                   {/* Title & duration */}
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium truncate ${
-                      item.completed ? 'text-gray-400 line-through' : 'text-gray-900'
-                    }`}>
-                      {item.title}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className={`text-sm font-medium truncate ${
+                        item.completed ? 'text-gray-400 line-through' : 'text-gray-900'
+                      }`}>
+                        {item.title}
+                      </p>
+                      {item.is_recurring && (
+                        <Repeat className="w-3 h-3 text-indigo-400 flex-shrink-0" title="Repeats daily" />
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-gray-400">
                         {formatMinutes(item.planned_minutes)}
@@ -477,6 +500,17 @@ const Home = () => {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleToggleRecurring(item)}
+                      className={`p-1.5 rounded transition-colors ${
+                        item.is_recurring
+                          ? 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50'
+                          : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
+                      }`}
+                      title={item.is_recurring ? 'Repeats daily (click to make one-time)' : 'One-time (click to repeat daily)'}
+                    >
+                      <Repeat className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => handleStartEditing(item)}
                       className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
@@ -520,7 +554,7 @@ const Home = () => {
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
             />
-            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-gray-500">Duration:</label>
                 <input
@@ -532,9 +566,27 @@ const Home = () => {
                 />
                 <span className="text-xs text-gray-400">min</span>
               </div>
+              <button
+                type="button"
+                onClick={() => setNewItemRecurring(!newItemRecurring)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                  newItemRecurring
+                    ? 'bg-indigo-100 border-indigo-300 text-indigo-700'
+                    : 'bg-white border-gray-300 text-gray-500 hover:border-indigo-300'
+                }`}
+              >
+                <Repeat className="w-3.5 h-3.5" />
+                {newItemRecurring ? 'Daily' : 'One-time'}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              {newItemRecurring && (
+                <p className="text-xs text-indigo-600">This item will appear in your plan every day</p>
+              )}
+              {!newItemRecurring && <div />}
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowAddItem(false); setNewItemTitle(''); setNewItemMinutes(30); }}
+                  onClick={() => { setShowAddItem(false); setNewItemTitle(''); setNewItemMinutes(30); setNewItemRecurring(false); }}
                   className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
                 >
                   Cancel
