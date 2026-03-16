@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { dayplanAPI } from '../services/api';
 import {
@@ -16,7 +16,9 @@ import {
   Target,
   Zap,
   Repeat,
-  MapPin
+  MapPin,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -50,6 +52,102 @@ const Home = () => {
   const [newItemStartAt, setNewItemStartAt] = useState('');
   const [showTemplateSettings, setShowTemplateSettings] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem('dayplan_notifications') === 'true';
+  });
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
+  const notifTimerRef = useRef(null);
+  const lastNotifiedRef = useRef('');
+
+  const enableNotifications = useCallback(async () => {
+    if (typeof Notification === 'undefined') {
+      toast.error('Notifications not supported in this browser');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      toast.error('Notifications blocked. Enable them in your browser settings.');
+      return;
+    }
+    if (Notification.permission === 'default') {
+      const perm = await Notification.requestPermission();
+      setNotificationPermission(perm);
+      if (perm !== 'granted') {
+        toast.error('Notification permission denied');
+        return;
+      }
+    }
+    setNotificationsEnabled(true);
+    localStorage.setItem('dayplan_notifications', 'true');
+    toast.success('Notifications enabled');
+  }, []);
+
+  const disableNotifications = useCallback(() => {
+    setNotificationsEnabled(false);
+    localStorage.setItem('dayplan_notifications', 'false');
+    if (notifTimerRef.current) {
+      clearTimeout(notifTimerRef.current);
+      notifTimerRef.current = null;
+    }
+    toast.success('Notifications disabled');
+  }, []);
+
+  useEffect(() => {
+    if (!notificationsEnabled || !plan?.items?.length) return;
+    if (notificationPermission !== 'granted') return;
+
+    const scheduleNext = () => {
+      if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+
+      const now = new Date();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+
+      const upcoming = plan.items
+        .filter((item) => !item.completed && item.scheduled_time)
+        .map((item) => {
+          const [h, m] = item.scheduled_time.split(':').map(Number);
+          return { ...item, timeMins: h * 60 + m };
+        })
+        .filter((item) => item.timeMins > nowMins)
+        .sort((a, b) => a.timeMins - b.timeMins);
+
+      if (upcoming.length === 0) return;
+
+      const next = upcoming[0];
+      const msUntil = (next.timeMins - nowMins) * 60 * 1000 - (now.getSeconds() * 1000);
+
+      if (msUntil <= 0) return;
+
+      notifTimerRef.current = setTimeout(() => {
+        const notifKey = `${next.id}-${next.scheduled_time}`;
+        if (lastNotifiedRef.current === notifKey) return;
+        lastNotifiedRef.current = notifKey;
+
+        try {
+          const n = new Notification('Innerwork - Next Task', {
+            body: `${next.title} — starting now (${formatTime12h(next.scheduled_time)})`,
+            icon: '/favicon.ico',
+            tag: `dayplan-${next.id}`,
+            requireInteraction: true
+          });
+          n.onclick = () => { window.focus(); n.close(); };
+        } catch (e) {
+          console.error('Notification error:', e);
+        }
+
+        toast(`Time for: ${next.title}`, { icon: '🔔', duration: 8000 });
+
+        setTimeout(scheduleNext, 2000);
+      }, msUntil);
+    };
+
+    scheduleNext();
+
+    return () => {
+      if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+    };
+  }, [notificationsEnabled, notificationPermission, plan]);
 
   const loadPlan = useCallback(async () => {
     try {
@@ -260,13 +358,26 @@ const Home = () => {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <button
-          onClick={() => setShowTemplateSettings(!showTemplateSettings)}
-          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          title="Template settings"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={notificationsEnabled ? disableNotifications : enableNotifications}
+            className={`p-2 rounded-lg transition-colors ${
+              notificationsEnabled
+                ? 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+            }`}
+            title={notificationsEnabled ? 'Notifications on (click to disable)' : 'Enable notifications'}
+          >
+            {notificationsEnabled ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+          </button>
+          <button
+            onClick={() => setShowTemplateSettings(!showTemplateSettings)}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Template settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Template Settings Dropdown */}
