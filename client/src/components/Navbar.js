@@ -216,7 +216,10 @@ const Navbar = () => {
 
       {/* Mobile menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-t border-gray-200">
+        <div
+          className="md:hidden bg-white border-t border-gray-200 overflow-y-auto overscroll-contain"
+          style={{ maxHeight: 'calc(100vh - 4rem)' }}
+        >
           <div className="px-2 pt-2 pb-3 space-y-1">
             {navigation.map((item) => {
               const Icon = item.icon;
