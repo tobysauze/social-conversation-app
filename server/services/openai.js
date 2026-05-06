@@ -1,4 +1,5 @@
 const OpenAI = require('openai');
+const { toFile } = require('openai');
 
 // OpenRouter-only (OpenAI-compatible API)
 // Set OPENROUTER_API_KEY and (optionally) OPENROUTER_MODEL.
@@ -19,6 +20,25 @@ const openai = new OpenAI({
   baseURL: LLM_BASE_URL,
   ...(defaultHeaders ? { defaultHeaders } : {})
 });
+
+// Direct OpenAI client (not via OpenRouter) for endpoints OpenRouter does not proxy,
+// e.g. audio transcription. Falls back gracefully if no key is configured.
+const openaiDirect = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const transcribeAudio = async (buffer, filename = 'audio.webm') => {
+  if (!openaiDirect) {
+    throw new Error('OPENAI_API_KEY is not configured on the server');
+  }
+  const file = await toFile(buffer, filename);
+  const result = await openaiDirect.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+    response_format: 'json'
+  });
+  return result.text || '';
+};
 
 function safeParseJson(content, fallback) {
   if (!content) return fallback;
@@ -843,5 +863,6 @@ module.exports = {
   iterateJoke,
   categorizeJoke,
   analyzeJournalForCBTIssues,
-  generateIdentityVision
+  generateIdentityVision,
+  transcribeAudio
 };

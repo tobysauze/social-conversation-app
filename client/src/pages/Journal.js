@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { journalAPI, storiesAPI, peopleAPI } from '../services/api';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Calendar, 
-  Clock, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Calendar,
+  Clock,
   Sparkles,
   BookOpen,
   MessageSquare,
   ArrowRight,
   Brain,
-  Lightbulb
+  Lightbulb,
+  Mic,
+  Square,
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -39,6 +42,12 @@ const Journal = () => {
   const [analyzingProfile, setAnalyzingProfile] = useState(false);
   const [analyzingInsights, setAnalyzingInsights] = useState(null);
   const [showJournalInsights, setShowJournalInsights] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
   const [journalInsights, setJournalInsights] = useState({
     goals: [],
     beliefs: [],
@@ -48,6 +57,17 @@ const Journal = () => {
 
   useEffect(() => {
     loadEntries();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stream?.getTracks().forEach((t) => t.stop());
+        try { recorder.stop(); } catch (_) {}
+      }
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
   }, []);
 
   const loadEntries = async () => {
@@ -60,6 +80,94 @@ const Journal = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const stopRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const pickAudioMimeType = () => {
+    if (typeof MediaRecorder === 'undefined') return '';
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+    return candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+  };
+
+  const handleStartRecording = async () => {
+    if (isRecording || transcribing) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      toast.error('Voice recording is not supported in this browser');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickAudioMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        stopRecordingTimer();
+        setIsRecording(false);
+        const blobType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: blobType });
+        audioChunksRef.current = [];
+        if (blob.size === 0) {
+          toast.error('No audio captured');
+          return;
+        }
+        const ext = blobType.includes('mp4') ? 'mp4' : blobType.includes('ogg') ? 'ogg' : 'webm';
+        setTranscribing(true);
+        try {
+          const response = await journalAPI.transcribe(blob, `recording.${ext}`);
+          const text = (response.data?.text || '').trim();
+          if (!text) {
+            toast('No speech detected', { icon: 'ℹ️' });
+            return;
+          }
+          setFormData((prev) => ({
+            ...prev,
+            content: prev.content ? `${prev.content.trimEnd()}\n\n${text}` : text
+          }));
+          toast.success('Transcribed');
+        } catch (err) {
+          console.error('Transcription error:', err);
+          toast.error(err.response?.data?.error || 'Failed to transcribe audio');
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Mic access error:', err);
+      toast.error('Could not access microphone');
+    }
+  };
+
+  const handleStopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+  };
+
+  const formatRecordingTime = (s) => {
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, '0')}`;
   };
 
   const handleSubmit = async (e) => {
@@ -392,16 +500,55 @@ const Journal = () => {
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
-                What's on your mind?
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="content" className="block text-sm font-medium text-gray-700">
+                  What's on your mind?
+                </label>
+                <div className="flex items-center space-x-2">
+                  {isRecording && (
+                    <span className="flex items-center text-sm text-red-600">
+                      <span className="w-2 h-2 bg-red-600 rounded-full mr-2 animate-pulse"></span>
+                      Recording {formatRecordingTime(recordingSeconds)}
+                    </span>
+                  )}
+                  {transcribing && (
+                    <span className="text-sm text-gray-600">Transcribing…</span>
+                  )}
+                  {!isRecording ? (
+                    <button
+                      type="button"
+                      onClick={handleStartRecording}
+                      disabled={transcribing}
+                      className="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      title="Record voice note"
+                    >
+                      {transcribing ? (
+                        <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                      ) : (
+                        <Mic className="w-4 h-4 mr-1.5" />
+                      )}
+                      {transcribing ? 'Transcribing' : 'Record'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleStopRecording}
+                      className="inline-flex items-center px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700"
+                      title="Stop and transcribe"
+                    >
+                      <Square className="w-4 h-4 mr-1.5" />
+                      Stop
+                    </button>
+                  )}
+                </div>
+              </div>
               <textarea
                 id="content"
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 rows={6}
                 className="input-field w-full"
-                placeholder="Write about your day, experiences, thoughts, or anything that happened..."
+                placeholder="Write about your day, experiences, thoughts, or anything that happened... or tap Record to speak."
                 required
               />
             </div>

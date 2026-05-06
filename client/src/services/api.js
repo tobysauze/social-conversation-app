@@ -69,6 +69,13 @@ export const journalAPI = {
   deleteEntry: (id) => api.delete(`/journal/${id}`),
   getEntriesByDateRange: (start, end) => api.get(`/journal/date-range/${start}/${end}`),
   analyzeInsights: (id) => api.post(`/journal/${id}/analyze-insights`),
+  transcribe: (audioBlob, filename = 'recording.webm') => {
+    const form = new FormData();
+    form.append('audio', audioBlob, filename);
+    return api.post('/journal/transcribe', form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 };
 
 // Stories API
@@ -252,6 +259,7 @@ export const dayplanAPI = {
   getTemplate: () => api.get('/dayplan/template'),
   updateTemplate: (data) => api.put('/dayplan/template', data),
   getPlan: (date) => api.get(`/dayplan${date ? `?date=${date}` : ''}`),
+  getHistory: (days = 30) => api.get(`/dayplan/history?days=${days}`),
   updateStartTime: (start_time, date) => api.patch('/dayplan/start-time', { start_time, date }),
   updateItem: (itemId, data) => api.patch(`/dayplan/items/${itemId}`, data),
   addItem: (data) => api.post('/dayplan/items', data),

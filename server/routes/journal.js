@@ -1,9 +1,15 @@
 const express = require('express');
+const multer = require('multer');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
-const { analyzeJournalForPersonalInsights } = require('../services/openai');
+const { analyzeJournalForPersonalInsights, transcribeAudio } = require('../services/openai');
 
 const router = express.Router();
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 } // Whisper API hard limit is 25MB
+});
 
 // Get all journal entries for a user
 router.get('/', authenticateToken, async (req, res) => {
@@ -152,6 +158,23 @@ router.get('/date-range/:start/:end', authenticateToken, async (req, res) => {
   } catch (e) {
     console.error('Journal date-range error:', e);
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Transcribe an audio recording for voice-based journal capture.
+// Returns the raw transcript so the client can let the user review/edit before saving.
+router.post('/transcribe', authenticateToken, audioUpload.single('audio'), async (req, res) => {
+  if (!req.file || !req.file.buffer || req.file.size === 0) {
+    return res.status(400).json({ error: 'No audio file uploaded' });
+  }
+  try {
+    const filename = req.file.originalname || 'recording.webm';
+    const text = await transcribeAudio(req.file.buffer, filename);
+    res.json({ text });
+  } catch (e) {
+    console.error('Journal transcribe error:', e);
+    const status = /OPENAI_API_KEY/.test(e.message) ? 503 : 500;
+    res.status(status).json({ error: e.message || 'Failed to transcribe audio' });
   }
 });
 
