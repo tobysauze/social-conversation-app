@@ -260,6 +260,12 @@ export const briefingAPI = {
     api.get(`/briefing/today${regenerate ? '?regenerate=1' : ''}`)
 };
 
+// Memory (semantic embeddings) API
+export const memoryAPI = {
+  getStats: () => api.get('/memory/stats'),
+  reindex: () => api.post('/memory/reindex')
+};
+
 // Day Plan API
 export const dayplanAPI = {
   getTemplate: () => api.get('/dayplan/template'),

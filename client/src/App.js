@@ -25,6 +25,7 @@ import Beliefs from './pages/Beliefs';
 import Protocols from './pages/Protocols';
 import Dating from './pages/Dating';
 import Briefing from './pages/Briefing';
+import Memory from './pages/Memory';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -235,6 +236,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Briefing />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/memory"
+            element={
+              <ProtectedRoute>
+                <Memory />
               </ProtectedRoute>
             }
           />

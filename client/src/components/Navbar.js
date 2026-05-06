@@ -23,7 +23,8 @@ import {
   ClipboardList,
   HeartHandshake,
   Moon,
-  Sun
+  Sun,
+  Database
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -51,7 +52,8 @@ const Navbar = () => {
     { name: 'Stories', href: '/stories', icon: MessageSquare },
     { name: 'Practice', href: '/practice', icon: Play },
     { name: 'Jokes', href: '/jokes', icon: Laugh },
-    { name: 'Genome', href: '/genome', icon: Dna }
+    { name: 'Genome', href: '/genome', icon: Dna },
+    { name: 'Memory', href: '/memory', icon: Database }
   ];
 
   const primaryNav = useMemo(() => {

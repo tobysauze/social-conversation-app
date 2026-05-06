@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { prisma } = require('../prisma/client');
 const OpenAI = require('openai');
+const { searchSimilar, isAvailable: memoryAvailable } = require('../services/embeddings');
 
 const router = express.Router();
 
@@ -214,7 +215,7 @@ Return ONLY the bullet points.`;
   return res.choices?.[0]?.message?.content?.trim() || null;
 }
 
-async function getAssistantReply({ model, memorySummaries, messages, personContext = '' }) {
+async function getAssistantReply({ model, memorySummaries, messages, personContext = '', personalContext = '' }) {
   if (!LLM_API_KEY) {
     return `AI is not configured on the server yet. Set OPENROUTER_API_KEY and restart the backend.`;
   }
@@ -224,8 +225,11 @@ async function getAssistantReply({ model, memorySummaries, messages, personConte
   const personBlock = personContext
     ? `\n\nPerson context for this conversation (IMPORTANT):\n${personContext}\n\nRole clarity:\n- The user chatting with you is the account owner seeking better connection with this person.\n- The profile above describes someone else, not the user.\n- Do NOT address the user as if they are this person.\n- Give guidance from the user's perspective: how to understand this person, communicate with them, and build a better relationship.\n- When useful, suggest concrete next messages/questions/actions the user can try with this person.`
     : '';
+  const personalBlock = personalContext
+    ? `\n\nRelevant excerpts from the user's own data (journal, dreams, beliefs, triggers, goals, people, identity). These were retrieved by semantic similarity to the latest user message — they are facts about the user, written by them:\n${personalContext}\n\nGround your response in this material when relevant. Reference specific entries when it would help the user see the pattern. Do NOT invent specifics that are not present.`
+    : '';
 
-  const system = `You are a helpful, friendly AI chat assistant. Be conversational, ask clarifying questions when needed, and keep responses grounded and practical.${memoryBlock}${personBlock}
+  const system = `You are the user's personal coach with memory of their journals, dreams, beliefs, anxiety triggers, goals, people, and identity work. Be direct, warm, and specific. When the user's own data is relevant, anchor your reply in it.${memoryBlock}${personBlock}${personalBlock}
 Use the saved chat memory as background context when it's relevant. Do NOT invent details if memory doesn't specify them.`;
 
   const res = await openai.chat.completions.create({
@@ -357,13 +361,42 @@ router.post('/message', authenticateToken, async (req, res) => {
     const chosenModel = pickModel(req);
     const personContext = personIdNum ? await getPersonContextForUser(uid, personIdNum) : '';
 
+    // Retrieve semantically similar excerpts from the user's own data so the
+    // coach has full context, not just the chat history.
+    let personalContext = '';
+    let retrievedCitations = [];
+    if (useMemory && memoryAvailable()) {
+      try {
+        const hits = await searchSimilar({ userId: uid, query: userMessage, limit: 8 });
+        if (hits.length) {
+          personalContext = hits
+            .map((h, i) => {
+              const meta = h.metadata || {};
+              const tag = h.sourceType + (meta.date ? ` ${meta.date}` : '');
+              const snippet = (h.content || '').slice(0, 800);
+              return `(${i + 1}) [${tag}] ${snippet}`;
+            })
+            .join('\n\n');
+          retrievedCitations = hits.map((h) => ({
+            sourceType: h.sourceType,
+            sourceId: h.sourceId,
+            metadata: h.metadata,
+            distance: h.distance
+          }));
+        }
+      } catch (memErr) {
+        console.warn('Memory retrieval failed:', memErr?.message);
+      }
+    }
+
     let assistantText;
     try {
       assistantText = await getAssistantReply({
         model: chosenModel,
         memorySummaries,
         messages: messagesForAI,
-        personContext
+        personContext,
+        personalContext
       });
     } catch (aiErr) {
       console.error('AI chat completion failed:', aiErr);
@@ -402,7 +435,11 @@ router.post('/message', authenticateToken, async (req, res) => {
       console.warn('Chat summary failed:', sumErr?.message);
     }
 
-    return res.json({ conversationId: conv.id, assistant: assistantText });
+    return res.json({
+      conversationId: conv.id,
+      assistant: assistantText,
+      citations: retrievedCitations
+    });
   } catch (e) {
     console.error('Chat message error:', e);
     return res.status(500).json({ error: 'Failed to send message' });
