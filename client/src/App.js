@@ -24,6 +24,7 @@ import Triggers from './pages/Triggers';
 import Beliefs from './pages/Beliefs';
 import Protocols from './pages/Protocols';
 import Dating from './pages/Dating';
+import Briefing from './pages/Briefing';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -229,7 +230,15 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+          <Route
+            path="/briefing"
+            element={
+              <ProtectedRoute>
+                <Briefing />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

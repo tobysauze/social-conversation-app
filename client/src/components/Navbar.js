@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  BookOpen, 
-  MessageSquare, 
-  Play, 
-  User, 
-  Menu, 
+import {
+  BookOpen,
+  MessageSquare,
+  Play,
+  User,
+  Menu,
   X,
   LogOut,
   Home,
@@ -22,7 +22,8 @@ import {
   ChevronDown,
   ClipboardList,
   HeartHandshake,
-  Moon
+  Moon,
+  Sun
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -34,6 +35,7 @@ const Navbar = () => {
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
+    { name: 'Briefing', href: '/briefing', icon: Sun },
     { name: 'Journal', href: '/journal', icon: BookOpen },
     { name: 'Wellness', href: '/wellness', icon: Heart },
     { name: 'Protocols', href: '/protocols', icon: ClipboardList },
@@ -53,12 +55,12 @@ const Navbar = () => {
   ];
 
   const primaryNav = useMemo(() => {
-    const primary = new Set(['Home', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
+    const primary = new Set(['Home', 'Briefing', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
     return navigation.filter((i) => primary.has(i.name));
   }, [navigation]);
 
   const moreNav = useMemo(() => {
-    const primary = new Set(['Home', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
+    const primary = new Set(['Home', 'Briefing', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
     return navigation.filter((i) => !primary.has(i.name));
   }, [navigation]);
 

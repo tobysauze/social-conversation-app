@@ -849,6 +849,69 @@ Return ONLY the statement text.`;
   return response.choices[0].message.content.trim();
 };
 
+const generateDailyBriefing = async (signals) => {
+  // signals is a compact JSON snapshot the route assembles. We trust that the
+  // route has already sliced/aggregated raw rows — we just turn the snapshot
+  // into a personal briefing.
+  const prompt = `
+You are a calm, observant personal coach. Generate a short Daily Briefing for the user based on the structured snapshot of their last week.
+
+Tone: warm but direct. Not a wellness app cliche — talk like a thoughtful friend who has read all of this. No hedging like "consider possibly thinking about." No headers in the summary — just prose.
+
+Snapshot:
+"""
+${JSON.stringify(signals, null, 2)}
+"""
+
+Return ONLY valid JSON in this exact shape:
+{
+  "greeting": "1 short line, e.g. 'Wednesday — a little rough on sleep.'",
+  "summary": "2-4 sentences. Synthesize the most important pattern from the data. If something stands out (sleep crash, anxiety cluster, untouched goal, missed habit), name it directly. If nothing stands out, say the day looks open and suggest a focus.",
+  "highlights": [
+    { "label": "Short fact, e.g. 'Slept 5.8h avg this week — down from 7.1h prior'", "tone": "warning" | "positive" | "neutral" }
+  ],
+  "open_threads": [
+    "Specific unresolved item pulled from a recent journal entry, e.g. 'You wrote about wanting to talk to your sister 4 days ago.'"
+  ],
+  "today_focus": "1-2 concrete things worth doing today, given the data. Not generic advice — anchor to the user's actual entries.",
+  "patterns": [
+    "Cross-data observation, e.g. 'Anxiety entries cluster on Sundays — today is Sunday.'"
+  ],
+  "people_to_reconnect": [
+    { "name": "Person name", "reason": "Brief reason from the data" }
+  ]
+}
+
+Guidelines:
+- Highlights: 3-5 items max. Each is a single sentence.
+- Open threads: only include if the journal entries actually contain unresolved commitments or worries — otherwise return [].
+- People: only mention names that are in the people list. Do not invent names. If you have no signal, return [].
+- Patterns: only include if a real pattern is visible in the data. Otherwise [].
+- Today focus: anchor to today's day plan if provided, plus one human suggestion.
+- Do NOT mention the snapshot or that you are an AI. No preamble outside the JSON.
+`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: getModel(),
+      messages: [
+        { role: 'system', content: 'You produce concise, specific daily briefings as strict JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.5,
+      max_tokens: 900
+    });
+
+    const raw = response.choices?.[0]?.message?.content || '';
+    const parsed = safeParseJson(raw, null);
+    if (!parsed) throw new Error('Briefing JSON parse failed');
+    return parsed;
+  } catch (error) {
+    console.error('Error generating daily briefing:', error);
+    throw new Error('Failed to generate daily briefing');
+  }
+};
+
 module.exports = {
   extractStories,
   refineStory,
@@ -864,5 +927,6 @@ module.exports = {
   categorizeJoke,
   analyzeJournalForCBTIssues,
   generateIdentityVision,
-  transcribeAudio
+  transcribeAudio,
+  generateDailyBriefing
 };

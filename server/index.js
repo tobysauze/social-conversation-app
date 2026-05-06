@@ -25,6 +25,7 @@ const datingRoutes = require('./routes/dating');
 const protocolsRoutes = require('./routes/protocols');
 const dreamsRoutes = require('./routes/dreams');
 const dayplanRoutes = require('./routes/dayplan');
+const briefingRoutes = require('./routes/briefing');
 const { initDatabase } = require('./database/init');
 // Prisma client (Postgres)
 let prisma = null;
@@ -114,6 +115,7 @@ app.use('/api/dating', datingRoutes);
 app.use('/api/protocols', protocolsRoutes);
 app.use('/api/dreams', dreamsRoutes);
 app.use('/api/dayplan', dayplanRoutes);
+app.use('/api/briefing', briefingRoutes);
 
 // Health check endpoint with database diagnostic
 app.get('/api/health', async (req, res) => {

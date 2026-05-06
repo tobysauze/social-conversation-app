@@ -254,6 +254,12 @@ export const genomeAPI = {
   downloadUrl: (id) => `${API_BASE_URL}/genome/${id}/download`
 };
 
+// Daily Briefing API
+export const briefingAPI = {
+  getToday: (regenerate = false) =>
+    api.get(`/briefing/today${regenerate ? '?regenerate=1' : ''}`)
+};
+
 // Day Plan API
 export const dayplanAPI = {
   getTemplate: () => api.get('/dayplan/template'),
