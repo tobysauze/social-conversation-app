@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ router.post('/', authenticateToken, async (req, res) => {
         changePlan: change_plan || null
       }
     });
+    syncMemory('belief', belief);
     return res.status(201).json({
       belief: {
         id: belief.id,
@@ -81,6 +83,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
         changePlan: change_plan || null
       }
     });
+    syncMemory('belief', belief);
     return res.json({
       belief: {
         id: belief.id,
@@ -105,6 +108,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       where: { id, userId: req.user.userId }
     });
     if (result.count === 0) return res.status(404).json({ error: 'Belief not found' });
+    syncMemoryDelete(req.user.userId, 'belief', id);
     return res.json({ status: 'deleted' });
   } catch (e) {
     console.error('Beliefs delete error:', e);

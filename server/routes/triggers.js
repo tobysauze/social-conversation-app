@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -47,6 +48,7 @@ router.post('/', authenticateToken, async (req, res) => {
         notes: notes || null
       }
     });
+    syncMemory('trigger', trigger);
     return res.status(201).json({
       trigger: {
         id: trigger.id,
@@ -91,6 +93,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
         notes: notes !== undefined ? (notes || null) : existing.notes
       }
     });
+    syncMemory('trigger', trigger);
     return res.json({
       trigger: {
         id: trigger.id,
@@ -116,6 +119,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       where: { id, userId: req.user.userId }
     });
     if (result.count === 0) return res.status(404).json({ error: 'Trigger not found' });
+    syncMemoryDelete(req.user.userId, 'trigger', id);
     return res.json({ status: 'deleted' });
   } catch (e) {
     console.error('Triggers delete error:', e);

@@ -2,6 +2,7 @@ const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { analyzeDream } = require('../services/openai');
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -89,6 +90,7 @@ router.post('/', authenticateToken, async (req, res) => {
         tags: tagsValue
       }
     });
+    syncMemory('dream', entry);
     res.status(201).json({
       entry: {
         id: entry.id,
@@ -129,6 +131,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         tags: tags ? JSON.stringify(tags) : null
       }
     });
+    syncMemory('dream', entry);
     res.json({
       entry: {
         id: entry.id,
@@ -152,6 +155,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.dreamEntry.delete({ where: { id: Number(id) } });
+    syncMemoryDelete(req.user.userId, 'dream', id);
     res.json({ message: 'Dream entry deleted successfully' });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Dream entry not found' });

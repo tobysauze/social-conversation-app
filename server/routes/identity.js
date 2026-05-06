@@ -2,6 +2,7 @@ const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { generateIdentityVision } = require('../services/openai');
+const { syncMemory } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -43,7 +44,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   const { vision = '', values = [], principles = [], traits = [], vision_points = [] } = req.body;
   try {
-    await prisma.identityVision.upsert({
+    const saved = await prisma.identityVision.upsert({
       where: { userId: req.user.userId },
       create: {
         userId: req.user.userId,
@@ -61,6 +62,7 @@ router.post('/', authenticateToken, async (req, res) => {
         visionPoints: JSON.stringify(vision_points)
       }
     });
+    syncMemory('identity', saved);
     return res.json({ message: 'Saved' });
   } catch (e) {
     console.error('Identity POST error:', e);

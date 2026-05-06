@@ -3,19 +3,7 @@ const multer = require('multer');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { analyzeJournalForPersonalInsights, transcribeAudio } = require('../services/openai');
-const { embedAndStore, deleteMemory, isAvailable: memoryAvailable } = require('../services/embeddings');
-
-function syncJournalEmbedding(entry) {
-  if (!memoryAvailable()) return;
-  const text = `Journal entry on ${entry.createdAt.toISOString().slice(0, 10)}${entry.mood ? `, feeling ${entry.mood}` : ''}:\n${entry.content}`;
-  embedAndStore({
-    userId: entry.userId,
-    sourceType: 'journal',
-    sourceId: entry.id,
-    content: text,
-    metadata: { date: entry.createdAt.toISOString().slice(0, 10), mood: entry.mood || null }
-  }).catch((e) => console.warn('Journal embed sync failed:', e?.message));
-}
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -89,7 +77,7 @@ router.post('/', authenticateToken, async (req, res) => {
         tags: tags ? JSON.stringify(tags) : null
       }
     });
-    syncJournalEmbedding(entry);
+    syncMemory('journal', entry);
     res.status(201).json({ entry: {
       id: entry.id,
       content: entry.content,
@@ -122,7 +110,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         tags: tags ? JSON.stringify(tags) : null
       }
     });
-    syncJournalEmbedding(entry);
+    syncMemory('journal', entry);
     res.json({ entry: {
       id: entry.id,
       content: entry.content,
@@ -143,10 +131,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.journalEntry.delete({ where: { id: Number(id) } });
-    if (memoryAvailable()) {
-      deleteMemory({ userId: req.user.userId, sourceType: 'journal', sourceId: Number(id) })
-        .catch((e) => console.warn('Journal embed delete failed:', e?.message));
-    }
+    syncMemoryDelete(req.user.userId, 'journal', id);
     res.json({ message: 'Journal entry deleted successfully' });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Journal entry not found' });

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Bot, Plus, Trash2, Send, RefreshCw, Search, Pencil, Check } from 'lucide-react';
+import { Bot, Plus, Trash2, Send, RefreshCw, Search, Pencil, Check, BookOpen, Moon, AlertTriangle, Target as TargetIcon, Users, ClipboardList, User as UserIcon, MessageSquare } from 'lucide-react';
 import { chatAPI } from '../services/api';
 import { format } from 'date-fns';
 
@@ -27,6 +27,53 @@ const formatDateTime = (value) => {
   const d = new Date(value);
   if (isNaN(d.getTime())) return '';
   return format(d, 'MMM d, yyyy h:mm a');
+};
+
+const SOURCE_META = {
+  journal:  { label: 'Journal',  icon: BookOpen,      color: 'text-amber-700 bg-amber-50 border-amber-200',  href: '/journal' },
+  dream:    { label: 'Dream',    icon: Moon,          color: 'text-indigo-700 bg-indigo-50 border-indigo-200', href: '/dreams' },
+  trigger:  { label: 'Trigger',  icon: AlertTriangle, color: 'text-red-700 bg-red-50 border-red-200',         href: '/triggers' },
+  belief:   { label: 'Belief',   icon: BookOpen,      color: 'text-purple-700 bg-purple-50 border-purple-200', href: '/beliefs' },
+  protocol: { label: 'Protocol', icon: ClipboardList, color: 'text-teal-700 bg-teal-50 border-teal-200',      href: '/protocols' },
+  goal:     { label: 'Goal',     icon: TargetIcon,    color: 'text-green-700 bg-green-50 border-green-200',   href: '/goals' },
+  person:   { label: 'Person',   icon: Users,         color: 'text-blue-700 bg-blue-50 border-blue-200',      href: '/people' },
+  story:    { label: 'Story',    icon: MessageSquare, color: 'text-pink-700 bg-pink-50 border-pink-200',      href: '/stories' },
+  identity: { label: 'Identity', icon: UserIcon,      color: 'text-gray-700 bg-gray-50 border-gray-200',      href: '/identity' }
+};
+
+function citationLabel(c) {
+  const meta = c.metadata || {};
+  if (meta.title) return meta.title;
+  if (meta.name) return meta.name;
+  if (meta.date) return meta.date;
+  if (meta.current) return `"${meta.current.slice(0, 40)}…"`;
+  return `#${c.sourceId}`;
+}
+
+const Citations = ({ citations }) => {
+  if (!Array.isArray(citations) || citations.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <span className="text-[11px] text-gray-500 self-center mr-0.5">Drew on</span>
+      {citations.map((c, i) => {
+        const m = SOURCE_META[c.sourceType] || { label: c.sourceType, icon: BookOpen, color: 'text-gray-700 bg-gray-50 border-gray-200', href: '#' };
+        const Icon = m.icon;
+        const label = citationLabel(c);
+        return (
+          <a
+            key={`${c.sourceType}-${c.sourceId}-${i}`}
+            href={m.href}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] hover:opacity-80 transition-opacity ${m.color}`}
+            title={`${m.label}${label ? ` — ${label}` : ''}`}
+          >
+            <Icon className="w-3 h-3" />
+            <span className="font-medium">{m.label}</span>
+            {label && <span className="text-[10px] opacity-75 max-w-[120px] truncate">{label}</span>}
+          </a>
+        );
+      })}
+    </div>
+  );
 };
 
 const Chat = () => {
@@ -229,6 +276,7 @@ const Chat = () => {
       const res = await chatAPI.sendMessage({ conversationId: activeId, message: text, useMemory, model });
       const convId = res.data.conversationId;
       const assistantText = res.data.assistant;
+      const citations = Array.isArray(res.data.citations) ? res.data.citations : [];
 
       if (!activeId && convId) {
         setActiveId(convId);
@@ -238,7 +286,7 @@ const Chat = () => {
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== optimistic.id),
         { id: `${Date.now()}-u`, role: 'user', content: text, created_at: optimistic.created_at },
-        { id: `${Date.now()}-a`, role: 'assistant', content: assistantText, created_at: new Date().toISOString() }
+        { id: `${Date.now()}-a`, role: 'assistant', content: assistantText, created_at: new Date().toISOString(), citations }
       ]);
       setTimeout(scrollToBottom, 50);
     } catch (e) {
@@ -481,6 +529,7 @@ const Chat = () => {
                     >
                       {m.content}
                     </div>
+                    {m.role === 'assistant' && <Citations citations={m.citations} />}
                     <div className={`text-[11px] mt-1 ${m.role === 'user' ? 'text-right text-gray-500' : 'text-gray-500'}`}>
                       {formatDateTime(m.created_at)}
                     </div>

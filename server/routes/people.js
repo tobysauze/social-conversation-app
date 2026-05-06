@@ -2,6 +2,7 @@ const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { getStoryRecommendations, analyzeJournalForPeopleInsights } = require('../services/openai');
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -155,6 +156,7 @@ router.post('/', authenticateToken, async (req, res) => {
         notes: notes || null
       }
     });
+    syncMemory('person', person);
     const legacy = {
       id: person.id,
       user_id: person.userId,
@@ -210,6 +212,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         notes: notes || null
       }
     });
+    syncMemory('person', person);
     const legacy = {
       id: person.id,
       user_id: person.userId,
@@ -237,6 +240,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.person.delete({ where: { id: Number(id) } });
+    syncMemoryDelete(req.user.userId, 'person', id);
     res.json({ message: 'Person deleted successfully' });
   } catch (e) {
     if (e.code === 'P2025') return res.status(404).json({ error: 'Person not found' });
@@ -354,7 +358,7 @@ router.post('/:id/apply-insights', authenticateToken, async (req, res) => {
       ? ((person.notes || '') ? `${person.notes}\n\n${newNotesPart}` : newNotesPart)
       : person.notes || null;
 
-    await prisma.person.update({
+    const updated = await prisma.person.update({
       where: { id: Number(id) },
       data: {
         interests: JSON.stringify(updatedInterests),
@@ -364,6 +368,7 @@ router.post('/:id/apply-insights', authenticateToken, async (req, res) => {
         notes: updatedNotes
       }
     });
+    syncMemory('person', updated);
 
     res.json({ message: 'Insights applied successfully' });
   } catch (e) {

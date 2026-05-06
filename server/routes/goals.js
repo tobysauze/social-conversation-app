@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -43,7 +44,7 @@ router.post('/', authenticateToken, async (req, res) => {
   const target_date = normalizeDate(req.body.target_date);
   if (!title) return res.status(400).json({ error: 'title required' });
   try {
-    await prisma.goal.create({
+    const created = await prisma.goal.create({
       data: {
         userId: req.user.userId,
         title,
@@ -52,6 +53,7 @@ router.post('/', authenticateToken, async (req, res) => {
         targetDate: target_date
       }
     });
+    syncMemory('goal', created);
     res.status(201).json({ message: 'Created' });
   } catch (e) {
     console.error('Goals POST error:', e);
@@ -79,6 +81,8 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       data
     });
     if (result.count === 0) return res.status(404).json({ error: 'Goal not found' });
+    const fresh = await prisma.goal.findFirst({ where: { id, userId: req.user.userId } });
+    if (fresh) syncMemory('goal', fresh);
     res.json({ message: 'Updated' });
   } catch (e) {
     console.error('Goals PATCH error:', e);
@@ -88,10 +92,12 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    const goalId = Number(req.params.id);
     const result = await prisma.goal.deleteMany({
-      where: { id: Number(req.params.id), userId: req.user.userId }
+      where: { id: goalId, userId: req.user.userId }
     });
     if (result.count === 0) return res.status(404).json({ error: 'Goal not found' });
+    syncMemoryDelete(req.user.userId, 'goal', goalId);
     res.json({ message: 'Deleted' });
   } catch (e) {
     console.error('Goals DELETE error:', e);

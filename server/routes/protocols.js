@@ -1,6 +1,7 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
+const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
 
 const router = express.Router();
 
@@ -50,7 +51,7 @@ router.post('/', authenticateToken, async (req, res) => {
   if (!title) return res.status(400).json({ error: 'title is required' });
 
   try {
-    await prisma.protocol.create({
+    const created = await prisma.protocol.create({
       data: {
         userId: req.user.userId,
         title,
@@ -59,6 +60,7 @@ router.post('/', authenticateToken, async (req, res) => {
         cadence: cadence || null
       }
     });
+    syncMemory('protocol', created);
     return res.status(201).json({ message: 'Created' });
   } catch (e) {
     console.error('Protocols create error:', e);
@@ -88,6 +90,8 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       data
     });
     if (result.count === 0) return res.status(404).json({ error: 'Protocol not found' });
+    const fresh = await prisma.protocol.findFirst({ where: { id: protocolId, userId: req.user.userId } });
+    if (fresh) syncMemory('protocol', fresh);
     return res.json({ message: 'Updated' });
   } catch (e) {
     console.error('Protocols update error:', e);
@@ -102,6 +106,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       where: { id: protocolId, userId: req.user.userId }
     });
     if (result.count === 0) return res.status(404).json({ error: 'Protocol not found' });
+    syncMemoryDelete(req.user.userId, 'protocol', protocolId);
     return res.json({ message: 'Deleted' });
   } catch (e) {
     console.error('Protocols delete error:', e);
