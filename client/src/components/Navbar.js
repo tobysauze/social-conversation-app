@@ -53,7 +53,8 @@ const Navbar = () => {
     { name: 'Practice', href: '/practice', icon: Play },
     { name: 'Jokes', href: '/jokes', icon: Laugh },
     { name: 'Genome', href: '/genome', icon: Dna },
-    { name: 'Memory', href: '/memory', icon: Database }
+    { name: 'Memory', href: '/memory', icon: Database },
+    { name: 'Health Sync', href: '/health-sync', icon: Heart }
   ];
 
   const primaryNav = useMemo(() => {

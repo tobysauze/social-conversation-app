@@ -26,6 +26,7 @@ import Protocols from './pages/Protocols';
 import Dating from './pages/Dating';
 import Briefing from './pages/Briefing';
 import Memory from './pages/Memory';
+import HealthSync from './pages/HealthSync';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -244,6 +245,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Memory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/health-sync"
+            element={
+              <ProtectedRoute>
+                <HealthSync />
               </ProtectedRoute>
             }
           />

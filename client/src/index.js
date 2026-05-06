@@ -80,3 +80,15 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Register the PWA service worker. Skipped on localhost during dev so we
+// don't accidentally cache a half-built bundle. Production-only registration
+// keeps the install/A2HS prompt working on the deployed site.
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      // Non-fatal — the app still works without it.
+      console.warn('SW registration failed:', err?.message);
+    });
+  });
+}

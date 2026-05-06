@@ -1,5 +1,6 @@
 const express = require('express');
 const { prisma } = require('../prisma/client');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -77,6 +78,49 @@ router.post('/apple-health', async (req, res) => {
   } catch (e) {
     console.error('Error storing health intake event:', e);
     return res.status(500).json({ error: 'Failed to store event' });
+  }
+});
+
+// GET /api/ingest/info — returns the data the user needs to wire up the
+// iOS Shortcut: their user_id, the ingest endpoint URL, the auth token,
+// and the most recent ingest events for verification. Authenticated.
+router.get('/info', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const events = await prisma.healthIntakeEvent.findMany({
+      where: { userId },
+      orderBy: { id: 'desc' },
+      take: 20
+    });
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const endpoint = `${protocol}://${host}/api/ingest/apple-health`;
+
+    res.json({
+      userId,
+      endpoint,
+      tokenConfigured: Boolean(process.env.HEALTH_INGEST_TOKEN),
+      // Token is intentionally surfaced — it's already shared with the user via
+      // the iOS Shortcut. This endpoint is auth-gated so only the logged-in
+      // owner sees it.
+      token: process.env.HEALTH_INGEST_TOKEN || null,
+      recentEvents: events.map((e) => ({
+        id: e.id,
+        source: e.source,
+        eventType: e.eventType,
+        eventDate: e.eventDate,
+        createdAt: e.createdAt,
+        // Parse to a small preview so the UI can show key fields without
+        // dumping the whole blob.
+        payload: (() => {
+          try { return JSON.parse(e.payloadJson); } catch (_) { return null; }
+        })()
+      }))
+    });
+  } catch (e) {
+    console.error('Ingest info error:', e);
+    res.status(500).json({ error: 'Failed to load ingest info' });
   }
 });
 

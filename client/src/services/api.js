@@ -266,6 +266,11 @@ export const memoryAPI = {
   reindex: () => api.post('/memory/reindex')
 };
 
+// Health Sync (Apple Health / Shortcuts ingest) API
+export const ingestAPI = {
+  getInfo: () => api.get('/ingest/info')
+};
+
 // Day Plan API
 export const dayplanAPI = {
   getTemplate: () => api.get('/dayplan/template'),
