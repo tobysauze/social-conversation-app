@@ -27,6 +27,7 @@ const dreamsRoutes = require('./routes/dreams');
 const dayplanRoutes = require('./routes/dayplan');
 const briefingRoutes = require('./routes/briefing');
 const memoryRoutes = require('./routes/memory');
+const gamesRoutes = require('./routes/games');
 const { initDatabase } = require('./database/init');
 // Prisma client (Postgres)
 let prisma = null;
@@ -118,6 +119,7 @@ app.use('/api/dreams', dreamsRoutes);
 app.use('/api/dayplan', dayplanRoutes);
 app.use('/api/briefing', briefingRoutes);
 app.use('/api/memory', memoryRoutes);
+app.use('/api/games', gamesRoutes);
 
 // Health check endpoint with database diagnostic
 app.get('/api/health', async (req, res) => {

@@ -912,6 +912,115 @@ Guidelines:
   }
 };
 
+const generateNameRiffs = async (name, contextNotes = '') => {
+  const prompt = `
+You're playing a casual word game with friends. Take the name "${name}" and produce 6-8 funny riffs on it. Examples of the vibe:
+- Mel → "Mel Mel Cool J" (after LL Cool J)
+- Steve → "Stevolution" (Revolution)
+- Tom → "Tomahawk Chop"
+- Sarah → "Sarah-monious" (acrimonious)
+- Jake → "Jake Gyllenhall-of-fame"
+
+Mix different styles:
+- Pop culture / song / movie / brand mash-ups
+- Clever rhymes
+- Alliteration or word-doubling
+- Made-up titles or nicknames
+- Punny compound words
+
+Avoid: insults, mean-spirited jokes, anything that depends on knowing the person beyond their name.
+
+${contextNotes ? `Context about this person (use sparingly, only if it sparks a great idea — don't force it): ${contextNotes}` : ''}
+
+Return ONLY valid JSON in this shape:
+{
+  "riffs": [
+    { "riff": "Mel Mel Cool J", "explanation": "After LL Cool J" }
+  ]
+}
+`;
+
+  const response = await openai.chat.completions.create({
+    model: getModel(),
+    messages: [
+      { role: 'system', content: 'You produce playful, casual name riffs as strict JSON. Funny first, family-friendly.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 1.0,
+    max_tokens: 600
+  });
+  const parsed = safeParseJson(response.choices?.[0]?.message?.content || '', { riffs: [] });
+  return parsed.riffs || [];
+};
+
+const generateBandNames = async (theme = '') => {
+  const prompt = `
+Generate 6-8 outrageous, absurd band names. Examples of the vibe:
+- "The Existential Dishwashers" (post-punk)
+- "Squidward's Asbestos Lawyers" (math rock)
+- "Goldfish on Bicycles" (dream pop)
+- "Geoff and the Kettle Crisis" (indie folk)
+- "Hot Dad Energy" (punk)
+
+Each one should pair the band name with a tiny genre tag in parentheses. Aim for the funny-because-specific sweet spot — abstract is forgettable, weirdly concrete is memorable.
+
+${theme ? `Optional theme/vibe to riff on: "${theme}". Use it as a launching pad, not a constraint — only ~half the names need to relate.` : ''}
+
+Avoid: anything that's just a real band slightly altered, mean-spirited names, racial/political content.
+
+Return ONLY valid JSON:
+{
+  "names": [
+    { "name": "The Existential Dishwashers", "genre": "post-punk" }
+  ]
+}
+`;
+
+  const response = await openai.chat.completions.create({
+    model: getModel(),
+    messages: [
+      { role: 'system', content: 'You produce funny absurd band names as strict JSON.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 1.05,
+    max_tokens: 600
+  });
+  const parsed = safeParseJson(response.choices?.[0]?.message?.content || '', { names: [] });
+  return parsed.names || [];
+};
+
+const generateTwoTruthsAndALie = async (subject = '', contextNotes = '') => {
+  const prompt = `
+Generate 3 statements about "${subject || 'a generic adult'}" for the party game Two Truths and a Lie. Two should be plausibly true; one should be the lie. The lie should be subtle, not obviously absurd — the kind that makes people second-guess.
+
+${contextNotes ? `Context (you may draw on it for plausibility, but DO NOT just regurgitate facts verbatim): ${contextNotes}` : ''}
+
+Return ONLY valid JSON. The "lie_index" field tells the user which one is the lie (0-indexed) so they can verify:
+{
+  "statements": [
+    "First statement.",
+    "Second statement.",
+    "Third statement."
+  ],
+  "lie_index": 1
+}
+
+Make the statements punchy — one sentence each, max 25 words. Avoid statements that require obscure knowledge to verify; the lie should be plausibly true to most people who know the subject casually.
+`;
+
+  const response = await openai.chat.completions.create({
+    model: getModel(),
+    messages: [
+      { role: 'system', content: 'You produce Two Truths and a Lie sets as strict JSON.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.9,
+    max_tokens: 400
+  });
+  const parsed = safeParseJson(response.choices?.[0]?.message?.content || '', { statements: [], lie_index: 0 });
+  return parsed;
+};
+
 module.exports = {
   extractStories,
   refineStory,
@@ -928,5 +1037,8 @@ module.exports = {
   analyzeJournalForCBTIssues,
   generateIdentityVision,
   transcribeAudio,
-  generateDailyBriefing
+  generateDailyBriefing,
+  generateNameRiffs,
+  generateBandNames,
+  generateTwoTruthsAndALie
 };

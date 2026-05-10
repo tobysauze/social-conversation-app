@@ -24,7 +24,8 @@ import {
   HeartHandshake,
   Moon,
   Sun,
-  Database
+  Database,
+  Sparkles
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -52,6 +53,7 @@ const Navbar = () => {
     { name: 'Stories', href: '/stories', icon: MessageSquare },
     { name: 'Practice', href: '/practice', icon: Play },
     { name: 'Jokes', href: '/jokes', icon: Laugh },
+    { name: 'Games', href: '/games', icon: Sparkles },
     { name: 'Genome', href: '/genome', icon: Dna },
     { name: 'Memory', href: '/memory', icon: Database },
     { name: 'Health Sync', href: '/health-sync', icon: Heart }

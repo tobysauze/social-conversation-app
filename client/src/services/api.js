@@ -271,6 +271,12 @@ export const ingestAPI = {
   getInfo: () => api.get('/ingest/info')
 };
 
+// Conversational word games API
+export const gamesAPI = {
+  generate: ({ game, input = '', personId = null }) =>
+    api.post('/games/generate', { game, input, personId })
+};
+
 // Day Plan API
 export const dayplanAPI = {
   getTemplate: () => api.get('/dayplan/template'),

@@ -27,6 +27,7 @@ import Dating from './pages/Dating';
 import Briefing from './pages/Briefing';
 import Memory from './pages/Memory';
 import HealthSync from './pages/HealthSync';
+import Games from './pages/Games';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -253,6 +254,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <HealthSync />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/games"
+            element={
+              <ProtectedRoute>
+                <Games />
               </ProtectedRoute>
             }
           />
