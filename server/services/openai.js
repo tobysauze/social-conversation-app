@@ -912,7 +912,14 @@ Guidelines:
   }
 };
 
-const generateNameRiffs = async (name, contextNotes = '') => {
+const generateNameRiffs = async (name, contextNotes = '', { previous = [], direction = '' } = {}) => {
+  const previousBlock = (previous || []).length
+    ? `\nAlready shown — DO NOT repeat or near-duplicate any of these:\n${previous.map((p) => `- ${p}`).join('\n')}`
+    : '';
+  const directionBlock = direction
+    ? `\nUser's refinement direction (lean hard into this): "${direction}"`
+    : '';
+
   const prompt = `
 You're playing a casual word game with friends. Take the name "${name}" and produce 6-8 funny riffs on it. Examples of the vibe:
 - Mel → "Mel Mel Cool J" (after LL Cool J)
@@ -931,6 +938,7 @@ Mix different styles:
 Avoid: insults, mean-spirited jokes, anything that depends on knowing the person beyond their name.
 
 ${contextNotes ? `Context about this person (use sparingly, only if it sparks a great idea — don't force it): ${contextNotes}` : ''}
+${previousBlock}${directionBlock}
 
 Return ONLY valid JSON in this shape:
 {
@@ -953,7 +961,14 @@ Return ONLY valid JSON in this shape:
   return parsed.riffs || [];
 };
 
-const generateBandNames = async (theme = '') => {
+const generateBandNames = async (theme = '', { previous = [], direction = '' } = {}) => {
+  const previousBlock = (previous || []).length
+    ? `\nAlready shown — DO NOT repeat or near-duplicate any of these:\n${previous.map((p) => `- ${p}`).join('\n')}`
+    : '';
+  const directionBlock = direction
+    ? `\nUser's refinement direction (lean hard into this): "${direction}"`
+    : '';
+
   const prompt = `
 Generate 6-8 outrageous, absurd band names. Examples of the vibe:
 - "The Existential Dishwashers" (post-punk)
@@ -967,6 +982,7 @@ Each one should pair the band name with a tiny genre tag in parentheses. Aim for
 ${theme ? `Optional theme/vibe to riff on: "${theme}". Use it as a launching pad, not a constraint — only ~half the names need to relate.` : ''}
 
 Avoid: anything that's just a real band slightly altered, mean-spirited names, racial/political content.
+${previousBlock}${directionBlock}
 
 Return ONLY valid JSON:
 {
@@ -989,11 +1005,19 @@ Return ONLY valid JSON:
   return parsed.names || [];
 };
 
-const generateTwoTruthsAndALie = async (subject = '', contextNotes = '') => {
+const generateTwoTruthsAndALie = async (subject = '', contextNotes = '', { previous = [], direction = '' } = {}) => {
+  const previousBlock = (previous || []).length
+    ? `\nAlready generated — produce a different angle, do not repeat these statements:\n${previous.map((p) => `- ${p}`).join('\n')}`
+    : '';
+  const directionBlock = direction
+    ? `\nUser's refinement direction (lean into this): "${direction}"`
+    : '';
+
   const prompt = `
 Generate 3 statements about "${subject || 'a generic adult'}" for the party game Two Truths and a Lie. Two should be plausibly true; one should be the lie. The lie should be subtle, not obviously absurd — the kind that makes people second-guess.
 
 ${contextNotes ? `Context (you may draw on it for plausibility, but DO NOT just regurgitate facts verbatim): ${contextNotes}` : ''}
+${previousBlock}${directionBlock}
 
 Return ONLY valid JSON. The "lie_index" field tells the user which one is the lie (0-indexed) so they can verify:
 {

@@ -276,8 +276,12 @@ export const ingestAPI = {
 
 // Conversational word games API
 export const gamesAPI = {
-  generate: ({ game, input = '', personId = null }) =>
-    api.post('/games/generate', { game, input, personId })
+  generate: ({ game, input = '', personId = null, previous = [], direction = '' }) =>
+    api.post('/games/generate', { game, input, personId, previous, direction }),
+  listSaved: (game) => api.get(`/games/saved${game ? `?game=${encodeURIComponent(game)}` : ''}`),
+  save: ({ game, content, metadata = null }) =>
+    api.post('/games/saved', { game, content, metadata }),
+  deleteSaved: (id) => api.delete(`/games/saved/${id}`)
 };
 
 // Day Plan API
