@@ -26,6 +26,123 @@ async function ensureJokePeopleTable() {
   ensuredJokePeople = true;
 }
 
+// Per-user managed topic list. Lets the user pre-create topics that don't
+// have any jokes yet (e.g. they want a "your mum jokes" bucket they're
+// planning to fill). Joke.category remains the source of truth on each row;
+// this table just adds the empty/managed slots.
+let ensuredJokeTopics = false;
+async function ensureJokeTopicsTable() {
+  if (ensuredJokeTopics) return;
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS joke_topics (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (user_id, name)
+      )`
+    );
+  } catch (e) {
+    console.warn('Could not ensure joke_topics table exists:', e?.message);
+  }
+  ensuredJokeTopics = true;
+}
+
+function normalizeTopicName(s) {
+  return (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
+}
+
+// --- Topics ----------------------------------------------------------------
+//
+// Topics are categories used for filtering jokes by subject (e.g. "blonde",
+// "your mum"). They merge two sources:
+//   1. Distinct values present in the user's Joke.category column.
+//   2. Rows in joke_topics — empty/managed topics the user pre-created.
+//
+// Defined BEFORE any /:id routes so that /topics doesn't get swallowed by
+// GET /:id (which would otherwise try to look up a joke with id="topics").
+
+router.get('/topics', authenticateToken, async (req, res) => {
+  await ensureJokeTopicsTable();
+  try {
+    const userId = req.user.userId;
+
+    const usedRows = await prisma.$queryRawUnsafe(
+      `SELECT category AS name, COUNT(*)::int AS count
+         FROM "Joke"
+        WHERE user_id = $1 AND category IS NOT NULL AND category <> ''
+        GROUP BY category`,
+      userId
+    );
+
+    const managedRows = await prisma.$queryRawUnsafe(
+      `SELECT name FROM joke_topics WHERE user_id = $1 ORDER BY name ASC`,
+      userId
+    );
+
+    const map = new Map();
+    for (const r of usedRows || []) {
+      const key = (r.name || '').toString();
+      if (!key) continue;
+      map.set(key, { name: key, count: Number(r.count) || 0, managed: false });
+    }
+    for (const r of managedRows || []) {
+      const key = (r.name || '').toString();
+      if (!key) continue;
+      const existing = map.get(key);
+      if (existing) existing.managed = true;
+      else map.set(key, { name: key, count: 0, managed: true });
+    }
+
+    const topics = Array.from(map.values()).sort((a, b) =>
+      b.count - a.count || a.name.localeCompare(b.name)
+    );
+    res.json({ topics });
+  } catch (e) {
+    console.error('List joke topics error:', e);
+    res.status(500).json({ error: 'Failed to list topics' });
+  }
+});
+
+router.post('/topics', authenticateToken, async (req, res) => {
+  await ensureJokeTopicsTable();
+  const name = normalizeTopicName(req.body?.name || '');
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO joke_topics (user_id, name) VALUES ($1, $2)
+       ON CONFLICT (user_id, name) DO NOTHING`,
+      req.user.userId,
+      name
+    );
+    res.status(201).json({ name });
+  } catch (e) {
+    console.error('Create joke topic error:', e);
+    res.status(500).json({ error: 'Failed to create topic' });
+  }
+});
+
+// Delete a managed topic. Does NOT touch jokes that have this category — the
+// jokes keep their category, the chip simply disappears if no jokes use the
+// name and no managed row remains.
+router.delete('/topics/:name', authenticateToken, async (req, res) => {
+  await ensureJokeTopicsTable();
+  const name = normalizeTopicName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  try {
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM joke_topics WHERE user_id = $1 AND name = $2`,
+      req.user.userId,
+      name
+    );
+    res.json({ deleted: name });
+  } catch (e) {
+    console.error('Delete joke topic error:', e);
+    res.status(500).json({ error: 'Failed to delete topic' });
+  }
+});
+
 // Get all jokes for a user
 router.get('/', authenticateToken, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;

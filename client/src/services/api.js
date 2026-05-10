@@ -154,7 +154,10 @@ export const peopleAPI = {
     untagPerson: (jokeId, personId) => api.delete(`/jokes/${jokeId}/tag-person/${personId}`),
     getJokesForPerson: (personId) => api.get(`/jokes/person/${personId}`),
     iterateJoke: (jokeId, conversationHistory) => api.post(`/jokes/${jokeId}/iterate`, { conversationHistory }),
-    categorize: (jokeId) => api.post(`/jokes/${jokeId}/categorize`)
+    categorize: (jokeId) => api.post(`/jokes/${jokeId}/categorize`),
+    listTopics: () => api.get('/jokes/topics'),
+    createTopic: (name) => api.post('/jokes/topics', { name }),
+    deleteTopic: (name) => api.delete(`/jokes/topics/${encodeURIComponent(name)}`)
   };
 
 // Wellness API
