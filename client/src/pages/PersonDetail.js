@@ -34,6 +34,8 @@ import {
 import { peopleAPI, jokesAPI, chatAPI } from '../services/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import PersonNotesPanel from '../components/PersonNotesPanel';
+import PersonExportButtons from '../components/PersonExportButtons';
 
 const PersonDetail = () => {
   const MODEL_STORAGE_KEY = 'llm_model';
@@ -761,7 +763,8 @@ const PersonDetail = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+              {!editing && <PersonExportButtons personId={id} personName={person.name} />}
               {!editing ? (
                 <>
                   <button
@@ -807,6 +810,9 @@ const PersonDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
+            {/* Notes (timestamped observations / voice extraction) */}
+            <PersonNotesPanel personId={id} personName={person.name} />
+
             {/* Basic Information */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">

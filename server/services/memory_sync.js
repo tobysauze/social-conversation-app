@@ -63,6 +63,14 @@ const builders = {
       if (arr.length) parts.push(`${f}: ${arr.join('; ')}`);
     }
     return { text: parts.join('\n'), metadata: null };
+  },
+  // person_note rows arrive with .id, .userId, .personId, .personName,
+  // .noteType, .content, .createdAt. Embedding includes the person name so
+  // semantic search across all people works even without a personId filter.
+  person_note: (n) => {
+    const date = n.createdAt ? new Date(n.createdAt).toISOString().slice(0, 10) : null;
+    const text = `Note about ${n.personName || 'a person'}${date ? ` (${date})` : ''} [${n.noteType || 'observation'}]: ${n.content}`;
+    return { text, metadata: { person_id: n.personId || null, person_name: n.personName || null, note_type: n.noteType || null, date } };
   }
 };
 

@@ -1,10 +1,87 @@
 const express = require('express');
+const multer = require('multer');
 const { prisma } = require('../prisma/client');
 const { authenticateToken } = require('../middleware/auth');
-const { getStoryRecommendations, analyzeJournalForPeopleInsights } = require('../services/openai');
+const {
+  getStoryRecommendations,
+  analyzeJournalForPeopleInsights,
+  transcribeAudio,
+  extractPersonNotesFromTranscript
+} = require('../services/openai');
 const { syncMemory, syncMemoryDelete } = require('../services/memory_sync');
+const { renderPersonMarkdown, renderVaultMarkdown, slugify } = require('../services/person_markdown');
 
 const router = express.Router();
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 } // Whisper hard limit
+});
+
+// person_notes: timestamped, soft-typed notes about a person. Append-only —
+// the user adds new notes over time and they accumulate. Edits/deletes go
+// through the dedicated endpoints below. Created via raw SQL to match the
+// existing pattern (joke_topics, daily_briefings, etc.) without a migration.
+let ensuredPersonNotes = false;
+async function ensurePersonNotesTable() {
+  if (ensuredPersonNotes) return;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS person_notes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        person_id INTEGER NOT NULL,
+        note_type TEXT NOT NULL DEFAULT 'observation',
+        content TEXT NOT NULL,
+        source TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_person_notes_person
+        ON person_notes(person_id, created_at DESC)
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_person_notes_user
+        ON person_notes(user_id, created_at DESC)
+    `);
+  } catch (e) {
+    console.warn('Could not ensure person_notes table:', e?.message);
+  }
+  ensuredPersonNotes = true;
+}
+
+const ALLOWED_NOTE_TYPES = new Set([
+  'observation', 'story', 'preference', 'speech_quirk',
+  'open_thread', 'pain_point', 'value', 'character', 'recent_context'
+]);
+
+function normalizeNoteType(s) {
+  const v = (s || '').toString().trim().toLowerCase();
+  return ALLOWED_NOTE_TYPES.has(v) ? v : 'observation';
+}
+
+async function loadPersonNotes(userId, personId) {
+  const rows = await prisma.$queryRawUnsafe(
+    `SELECT id, note_type, content, source, created_at
+       FROM person_notes
+      WHERE user_id = $1 AND person_id = $2
+      ORDER BY created_at DESC`,
+    userId,
+    personId
+  );
+  return (rows || []).map((r) => ({
+    id: Number(r.id),
+    noteType: r.note_type,
+    content: r.content,
+    source: r.source || null,
+    createdAt: r.created_at
+  }));
+}
+
+async function findOwnedPerson(userId, personId) {
+  return prisma.person.findFirst({ where: { id: Number(personId), userId: Number(userId) } });
+}
 
 function parseJsonArrayOrWrap(value) {
   if (Array.isArray(value)) return value;
@@ -91,6 +168,31 @@ router.get('/', authenticateToken, async (req, res) => {
     res.json({ people: legacy });
   } catch (e) {
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Combined "vault" download — every person rendered as markdown in a single
+// file separated by horizontal rules. Defined BEFORE /:id so the literal
+// path doesn't get caught by the id matcher.
+router.get('/vault', authenticateToken, async (req, res) => {
+  await ensurePersonNotesTable();
+  try {
+    const people = await prisma.person.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { name: 'asc' }
+    });
+    const withNotes = [];
+    for (const p of people) {
+      const notes = await loadPersonNotes(req.user.userId, p.id);
+      withNotes.push({ person: p, notes });
+    }
+    const markdown = renderVaultMarkdown(withNotes);
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="people-vault.md"`);
+    res.send(markdown);
+  } catch (e) {
+    console.error('Vault render error:', e);
+    res.status(500).json({ error: 'Failed to render vault' });
   }
 });
 
@@ -689,6 +791,202 @@ router.delete('/:id/inside-jokes/:jokeId', authenticateToken, async (req, res) =
   } catch (e) {
     console.error('Delete inside joke error:', e);
     res.status(500).json({ error: 'Failed to delete inside joke' });
+  }
+});
+
+// --- Person Notes ----------------------------------------------------------
+//
+// Append-only timestamped notes about a person, organized by soft type tags.
+// New notes auto-embed into the unified memory layer so the AI Chat surfaces
+// them as citations during conversations about (or with) the person.
+
+router.get('/:id/notes', authenticateToken, async (req, res) => {
+  await ensurePersonNotesTable();
+  try {
+    const person = await findOwnedPerson(req.user.userId, req.params.id);
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+    const notes = await loadPersonNotes(req.user.userId, person.id);
+    res.json({ notes });
+  } catch (e) {
+    console.error('List person notes error:', e);
+    res.status(500).json({ error: 'Failed to load notes' });
+  }
+});
+
+router.post('/:id/notes', authenticateToken, async (req, res) => {
+  await ensurePersonNotesTable();
+  const content = (req.body?.content || '').toString().trim();
+  if (!content) return res.status(400).json({ error: 'content is required' });
+  const noteType = normalizeNoteType(req.body?.note_type || req.body?.noteType);
+  const source = (req.body?.source || 'manual').toString().slice(0, 40);
+
+  try {
+    const person = await findOwnedPerson(req.user.userId, req.params.id);
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const rows = await prisma.$queryRawUnsafe(
+      `INSERT INTO person_notes (user_id, person_id, note_type, content, source)
+         VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, note_type, content, source, created_at`,
+      req.user.userId,
+      person.id,
+      noteType,
+      content,
+      source
+    );
+    const note = {
+      id: Number(rows[0].id),
+      noteType: rows[0].note_type,
+      content: rows[0].content,
+      source: rows[0].source || null,
+      createdAt: rows[0].created_at
+    };
+
+    syncMemory('person_note', {
+      id: note.id,
+      userId: req.user.userId,
+      personId: person.id,
+      personName: person.name,
+      noteType: note.noteType,
+      content: note.content,
+      createdAt: note.createdAt
+    });
+
+    res.status(201).json({ note });
+  } catch (e) {
+    console.error('Create person note error:', e);
+    res.status(500).json({ error: 'Failed to save note' });
+  }
+});
+
+// Bulk save — used by the voice-extraction flow after the user picks which
+// suggested notes to keep.
+router.post('/:id/notes/bulk', authenticateToken, async (req, res) => {
+  await ensurePersonNotesTable();
+  const items = Array.isArray(req.body?.notes) ? req.body.notes : [];
+  if (items.length === 0) return res.status(400).json({ error: 'no notes provided' });
+
+  try {
+    const person = await findOwnedPerson(req.user.userId, req.params.id);
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    const created = [];
+    for (const item of items) {
+      const content = (item?.content || '').toString().trim();
+      if (!content) continue;
+      const noteType = normalizeNoteType(item?.note_type || item?.noteType);
+      const source = (item?.source || 'voice').toString().slice(0, 40);
+      const rows = await prisma.$queryRawUnsafe(
+        `INSERT INTO person_notes (user_id, person_id, note_type, content, source)
+           VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, note_type, content, source, created_at`,
+        req.user.userId,
+        person.id,
+        noteType,
+        content,
+        source
+      );
+      const note = {
+        id: Number(rows[0].id),
+        noteType: rows[0].note_type,
+        content: rows[0].content,
+        source: rows[0].source || null,
+        createdAt: rows[0].created_at
+      };
+      created.push(note);
+      syncMemory('person_note', {
+        id: note.id,
+        userId: req.user.userId,
+        personId: person.id,
+        personName: person.name,
+        noteType: note.noteType,
+        content: note.content,
+        createdAt: note.createdAt
+      });
+    }
+    res.status(201).json({ notes: created });
+  } catch (e) {
+    console.error('Bulk save person notes error:', e);
+    res.status(500).json({ error: 'Failed to save notes' });
+  }
+});
+
+router.delete('/:id/notes/:noteId', authenticateToken, async (req, res) => {
+  await ensurePersonNotesTable();
+  const noteId = Number(req.params.noteId);
+  if (!Number.isFinite(noteId)) return res.status(400).json({ error: 'invalid noteId' });
+  try {
+    const person = await findOwnedPerson(req.user.userId, req.params.id);
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM person_notes WHERE id = $1 AND user_id = $2 AND person_id = $3`,
+      noteId,
+      req.user.userId,
+      person.id
+    );
+    syncMemoryDelete(req.user.userId, 'person_note', noteId);
+    res.json({ deleted: noteId });
+  } catch (e) {
+    console.error('Delete person note error:', e);
+    res.status(500).json({ error: 'Failed to delete note' });
+  }
+});
+
+// Voice-note → transcript → suggested-notes extraction. Returns suggestions
+// WITHOUT persisting — the client renders them for review, then POSTs the
+// kept ones to /:id/notes/bulk.
+router.post('/:id/notes/extract', authenticateToken, audioUpload.single('audio'), async (req, res) => {
+  if (!req.file || !req.file.buffer || req.file.size === 0) {
+    return res.status(400).json({ error: 'No audio file uploaded' });
+  }
+  try {
+    const person = await findOwnedPerson(req.user.userId, req.params.id);
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+
+    // Build a compact "existing profile" snapshot so the LLM doesn't duplicate
+    // things already on file.
+    const existing = await loadPersonNotes(req.user.userId, person.id);
+    const summary = [
+      `Name: ${person.name}`,
+      person.relationship ? `Relationship: ${person.relationship}` : null,
+      person.notes ? `Notes: ${person.notes}` : null,
+      existing.length ? `Existing notes (most recent first):\n${existing.slice(0, 30).map((n) => `- [${n.noteType}] ${n.content}`).join('\n')}` : null
+    ].filter(Boolean).join('\n');
+
+    const transcript = await transcribeAudio(
+      req.file.buffer,
+      req.file.originalname || 'recording.webm'
+    );
+    if (!transcript || !transcript.trim()) {
+      return res.json({ transcript: '', suggestions: [] });
+    }
+
+    const suggestions = await extractPersonNotesFromTranscript({
+      personName: person.name,
+      transcript,
+      existingProfile: summary
+    });
+    res.json({ transcript, suggestions });
+  } catch (e) {
+    console.error('Extract person notes error:', e);
+    const status = /OPENAI_API_KEY/.test(e.message) ? 503 : 500;
+    res.status(status).json({ error: e.message || 'Failed to extract notes' });
+  }
+});
+
+// Render this person's markdown profile. Returns JSON { markdown, filename }
+// so the client can both display and trigger a download with a clean name.
+router.get('/:id/markdown', authenticateToken, async (req, res) => {
+  await ensurePersonNotesTable();
+  try {
+    const person = await findOwnedPerson(req.user.userId, req.params.id);
+    if (!person) return res.status(404).json({ error: 'Person not found' });
+    const notes = await loadPersonNotes(req.user.userId, person.id);
+    const markdown = renderPersonMarkdown(person, notes);
+    res.json({ markdown, filename: `${slugify(person.name)}.md` });
+  } catch (e) {
+    console.error('Render person markdown error:', e);
+    res.status(500).json({ error: 'Failed to render markdown' });
   }
 });
 

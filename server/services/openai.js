@@ -1045,6 +1045,67 @@ Make the statements punchy — one sentence each, max 25 words. Avoid statements
   return parsed;
 };
 
+// Take a voice-note-style transcript about a person and split it into
+// timestamped, typed notes (observation, story, preference, etc). Returns a
+// JSON array of suggested rows that the UI shows for user review BEFORE
+// persisting — we never auto-write.
+const extractPersonNotesFromTranscript = async ({ personName, transcript, existingProfile = '' }) => {
+  const prompt = `
+You are helping the user keep notes on people they care about. They just recorded a voice memo about ${personName || 'someone'}. Below is the transcript. Extract a set of structured notes from it.
+
+Note types — pick the most appropriate per item:
+- observation: things the user noticed about the person's mood, body language, behaviour
+- story: a story or anecdote the person told
+- preference: things the person likes or dislikes
+- speech_quirk: distinctive phrases, accents, verbal tics
+- open_thread: things to follow up on later (events, recommendations, unfinished topics)
+- pain_point: sensitive topics, things to avoid bringing up
+- value: what the person seems to value or care deeply about
+- character: longer-term personality observations
+- recent_context: what's going on for them right now
+
+${existingProfile ? `Existing profile snapshot (so you don't duplicate facts already on file):\n"""\n${existingProfile.slice(0, 2000)}\n"""\n` : ''}
+
+Transcript:
+"""
+${transcript}
+"""
+
+Return ONLY valid JSON in this exact shape (no commentary):
+{
+  "notes": [
+    { "note_type": "story", "content": "Crashed his dad's car at 17 — frames it as the moment he learned to be cautious." },
+    { "note_type": "open_thread", "content": "Sister's wedding in October — he's stressed about it." }
+  ]
+}
+
+Guidelines:
+- One discrete observation per note. Don't merge unrelated things.
+- Keep content concrete and specific — the literal thing observed or said.
+- Skip filler ("um, like, I think") and self-narration ("I was walking home...").
+- If the transcript doesn't contain anything worth keeping, return { "notes": [] }.
+- Do NOT invent details that aren't in the transcript.
+`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: getModel(),
+      messages: [
+        { role: 'system', content: 'You extract structured notes about people from short transcripts. Output strict JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 900
+    });
+    const raw = response.choices?.[0]?.message?.content || '';
+    const parsed = safeParseJson(raw, { notes: [] });
+    return Array.isArray(parsed?.notes) ? parsed.notes.filter((n) => n && n.content && n.note_type) : [];
+  } catch (e) {
+    console.error('extractPersonNotesFromTranscript error:', e);
+    throw new Error('Failed to extract notes');
+  }
+};
+
 module.exports = {
   extractStories,
   refineStory,
@@ -1064,5 +1125,6 @@ module.exports = {
   generateDailyBriefing,
   generateNameRiffs,
   generateBandNames,
-  generateTwoTruthsAndALie
+  generateTwoTruthsAndALie,
+  extractPersonNotesFromTranscript
 };

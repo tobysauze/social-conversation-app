@@ -139,7 +139,26 @@ export const peopleAPI = {
   listInsideJokes: (personId) => api.get(`/people/${personId}/inside-jokes`),
   createInsideJoke: (personId, data) => api.post(`/people/${personId}/inside-jokes`, data),
   updateInsideJoke: (personId, jokeId, data) => api.patch(`/people/${personId}/inside-jokes/${jokeId}`, data),
-  deleteInsideJoke: (personId, jokeId) => api.delete(`/people/${personId}/inside-jokes/${jokeId}`)
+  deleteInsideJoke: (personId, jokeId) => api.delete(`/people/${personId}/inside-jokes/${jokeId}`),
+
+  // Notes (timestamped, soft-typed observations about a person)
+  listNotes: (personId) => api.get(`/people/${personId}/notes`),
+  createNote: (personId, { content, noteType = 'observation', source = 'manual' }) =>
+    api.post(`/people/${personId}/notes`, { content, note_type: noteType, source }),
+  deleteNote: (personId, noteId) => api.delete(`/people/${personId}/notes/${noteId}`),
+  bulkSaveNotes: (personId, notes) =>
+    api.post(`/people/${personId}/notes/bulk`, { notes }),
+  extractFromAudio: (personId, audioBlob, filename = 'recording.webm') => {
+    const form = new FormData();
+    form.append('audio', audioBlob, filename);
+    return api.post(`/people/${personId}/notes/extract`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  // Markdown export
+  getMarkdown: (personId) => api.get(`/people/${personId}/markdown`),
+  downloadVaultUrl: () => `${API_BASE_URL}/people/vault`
 };
 
   // Jokes API
