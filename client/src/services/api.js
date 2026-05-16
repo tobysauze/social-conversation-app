@@ -288,6 +288,14 @@ export const memoryAPI = {
   reindex: () => api.post('/memory/reindex')
 };
 
+// "Me" — single hand-written self-profile markdown blob, downloadable as me.md
+export const meAPI = {
+  getProfile: () => api.get('/me/profile'),
+  saveProfile: (content) => api.put('/me/profile', { content }),
+  extractSuggestions: () => api.post('/me/extract'),
+  downloadUrl: () => `${API_BASE_URL}/me/markdown`
+};
+
 // Health Sync (Apple Health / Shortcuts ingest) API
 export const ingestAPI = {
   getInfo: () => api.get('/ingest/info')

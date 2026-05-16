@@ -3,6 +3,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { prisma } = require('../prisma/client');
 const OpenAI = require('openai');
 const { searchSimilar, isAvailable: memoryAvailable } = require('../services/embeddings');
+const { loadProfile: loadMeProfile } = require('./me');
 
 const router = express.Router();
 
@@ -215,12 +216,18 @@ Return ONLY the bullet points.`;
   return res.choices?.[0]?.message?.content?.trim() || null;
 }
 
-async function getAssistantReply({ model, memorySummaries, messages, personContext = '', personalContext = '' }) {
+async function getAssistantReply({ model, memorySummaries, messages, personContext = '', personalContext = '', meProfile = '' }) {
   if (!LLM_API_KEY) {
     return `AI is not configured on the server yet. Set OPENROUTER_API_KEY and restart the backend.`;
   }
   const memoryBlock = (memorySummaries || []).length
     ? `\n\nSaved chat memory (summaries of the user's prior chats):\n${memorySummaries.map((s, i) => `(${i + 1}) ${s}`).join('\n')}\n`
+    : '';
+  // me.md goes at the very top of the system prompt — it's the user's own
+  // hand-written "this is who I am, here's how to talk to me" reference.
+  // Trim aggressively so a runaway file doesn't blow the context budget.
+  const meBlock = (meProfile || '').trim()
+    ? `\n\nThe user's own profile (me.md — their hand-written reference about themselves, including how they want to be talked to). Honor any tone/style preferences stated here:\n"""\n${meProfile.trim().slice(0, 4000)}\n"""\n`
     : '';
   const personBlock = personContext
     ? `\n\nPerson context for this conversation (IMPORTANT):\n${personContext}\n\nRole clarity:\n- The user chatting with you is the account owner seeking better connection with this person.\n- The profile above describes someone else, not the user.\n- Do NOT address the user as if they are this person.\n- Give guidance from the user's perspective: how to understand this person, communicate with them, and build a better relationship.\n- When useful, suggest concrete next messages/questions/actions the user can try with this person.`
@@ -229,7 +236,7 @@ async function getAssistantReply({ model, memorySummaries, messages, personConte
     ? `\n\nRelevant excerpts from the user's own data (journal, dreams, beliefs, triggers, goals, people, identity). These were retrieved by semantic similarity to the latest user message — they are facts about the user, written by them:\n${personalContext}\n\nGround your response in this material when relevant. Reference specific entries when it would help the user see the pattern. Do NOT invent specifics that are not present.`
     : '';
 
-  const system = `You are the user's personal coach with memory of their journals, dreams, beliefs, anxiety triggers, goals, people, and identity work. Be direct, warm, and specific. When the user's own data is relevant, anchor your reply in it.${memoryBlock}${personBlock}${personalBlock}
+  const system = `You are the user's personal coach with memory of their journals, dreams, beliefs, anxiety triggers, goals, people, and identity work. Be direct, warm, and specific. When the user's own data is relevant, anchor your reply in it.${meBlock}${memoryBlock}${personBlock}${personalBlock}
 Use the saved chat memory as background context when it's relevant. Do NOT invent details if memory doesn't specify them.`;
 
   const res = await openai.chat.completions.create({
@@ -361,6 +368,14 @@ router.post('/message', authenticateToken, async (req, res) => {
     const chosenModel = pickModel(req);
     const personContext = personIdNum ? await getPersonContextForUser(uid, personIdNum) : '';
 
+    // Load the user's me.md (hand-written self-description). Fire-and-forget
+    // — if it fails for any reason we just skip the block, never block the chat.
+    let meProfile = '';
+    try {
+      const me = await loadMeProfile(uid);
+      meProfile = me?.content || '';
+    } catch (_) {}
+
     // Retrieve semantically similar excerpts from the user's own data so the
     // coach has full context, not just the chat history.
     let personalContext = '';
@@ -396,7 +411,8 @@ router.post('/message', authenticateToken, async (req, res) => {
         memorySummaries,
         messages: messagesForAI,
         personContext,
-        personalContext
+        personalContext,
+        meProfile
       });
     } catch (aiErr) {
       console.error('AI chat completion failed:', aiErr);

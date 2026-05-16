@@ -38,6 +38,7 @@ const Navbar = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Briefing', href: '/briefing', icon: Sun },
+    { name: 'Me', href: '/me', icon: User },
     { name: 'Journal', href: '/journal', icon: BookOpen },
     { name: 'Wellness', href: '/wellness', icon: Heart },
     { name: 'Protocols', href: '/protocols', icon: ClipboardList },
@@ -60,12 +61,12 @@ const Navbar = () => {
   ];
 
   const primaryNav = useMemo(() => {
-    const primary = new Set(['Home', 'Briefing', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
+    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
     return navigation.filter((i) => primary.has(i.name));
   }, [navigation]);
 
   const moreNav = useMemo(() => {
-    const primary = new Set(['Home', 'Briefing', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
+    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
     return navigation.filter((i) => !primary.has(i.name));
   }, [navigation]);
 
