@@ -16,14 +16,10 @@ import PersonDetail from './pages/PersonDetail';
 import Jokes from './pages/Jokes';
 import Wellness from './pages/Wellness';
 import Coach from './pages/Coach';
-import Identity from './pages/Identity';
-import Goals from './pages/Goals';
+// Identity / Goals / Beliefs / Triggers / Dating are now tabs inside /me — see pages/Me.js
 import Genome from './pages/Genome';
 import Chat from './pages/Chat';
-import Triggers from './pages/Triggers';
-import Beliefs from './pages/Beliefs';
 import Protocols from './pages/Protocols';
-import Dating from './pages/Dating';
 import Briefing from './pages/Briefing';
 import Memory from './pages/Memory';
 import Me from './pages/Me';
@@ -162,22 +158,7 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/identity" 
-            element={
-              <ProtectedRoute>
-                <Identity />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/goals" 
-            element={
-              <ProtectedRoute>
-                <Goals />
-              </ProtectedRoute>
-            } 
-          />
+          {/* /identity, /goals, /beliefs, /triggers, /dating moved into tabs on /me */}
           <Route 
             path="/coach" 
             element={
@@ -203,34 +184,10 @@ function AppContent() {
             }
           />
           <Route
-            path="/triggers"
-            element={
-              <ProtectedRoute>
-                <Triggers />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/beliefs"
-            element={
-              <ProtectedRoute>
-                <Beliefs />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/protocols"
             element={
               <ProtectedRoute>
                 <Protocols />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dating"
-            element={
-              <ProtectedRoute>
-                <Dating />
               </ProtectedRoute>
             }
           />

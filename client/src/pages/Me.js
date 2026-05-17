@@ -12,10 +12,32 @@ import {
   Eye,
   Code,
   Wand2,
-  X
+  X,
+  Target as TargetIcon,
+  BookOpen,
+  AlertTriangle,
+  HeartHandshake,
+  User
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
+
+// The five domain pages live as tabs inside /me now — they keep all their
+// existing CRUD/state since we mount them as-is rather than copying their guts.
+import Goals from './Goals';
+import Identity from './Identity';
+import Beliefs from './Beliefs';
+import Triggers from './Triggers';
+import Dating from './Dating';
+
+const TABS = [
+  { key: 'profile',  label: 'Profile',  icon: UserIcon,      hint: 'me.md — your hand-written self-summary' },
+  { key: 'goals',    label: 'Goals',    icon: TargetIcon,    hint: 'What you\'re actively working toward' },
+  { key: 'identity', label: 'Identity', icon: User,          hint: 'Vision, values, principles, traits' },
+  { key: 'beliefs',  label: 'Beliefs',  icon: BookOpen,      hint: 'Current beliefs you want to shift' },
+  { key: 'triggers', label: 'Triggers', icon: AlertTriangle, hint: 'Things that pull you off-balance' },
+  { key: 'dating',   label: 'Dating',   icon: HeartHandshake, hint: 'What you\'re looking for / self-reflection' }
+];
 
 const TEMPLATE = `# Me
 
@@ -153,6 +175,16 @@ function renderMarkdownPreview(src) {
 }
 
 const Me = () => {
+  // Persist last-active tab in localStorage so deep-linking from elsewhere
+  // doesn't kick the user back to Profile every time.
+  const [tab, setTab] = useState(() => {
+    try { return localStorage.getItem('me_active_tab') || 'profile'; }
+    catch (_) { return 'profile'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('me_active_tab', tab); } catch (_) {}
+  }, [tab]);
+
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [updatedAt, setUpdatedAt] = useState(null);
@@ -184,7 +216,14 @@ const Me = () => {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Only load the markdown profile when the Profile tab is actually in use.
+  // No reason to hit the endpoint when the user lands on, e.g., Goals.
+  useEffect(() => {
+    if (tab === 'profile' && originalContent === '' && !loading) {
+      // already loaded once
+      return;
+    }
+  }, [tab, originalContent, loading]);
 
   const handleSave = async () => {
     if (saving || !dirty) return;
@@ -263,15 +302,45 @@ const Me = () => {
 
   const stale = updatedAt && (Date.now() - new Date(updatedAt).getTime()) > 60 * 24 * 60 * 60 * 1000;
 
+  const activeTab = TABS.find((t) => t.key === tab) || TABS[0];
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mb-4">
+        <div className="flex items-center gap-2 text-indigo-500 mb-1">
+          <UserIcon className="w-5 h-5" />
+          <span className="text-xs uppercase tracking-wide font-semibold">Me</span>
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900">Everything about you</h1>
+        <p className="text-sm text-gray-600 mt-1">{activeTab.hint}</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-6 overflow-x-auto">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'profile' && (
+      <>
       <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <div className="flex items-center gap-2 text-indigo-500 mb-1">
-            <UserIcon className="w-5 h-5" />
-            <span className="text-xs uppercase tracking-wide font-semibold">Me</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Your me.md</h1>
+          <h2 className="text-lg font-semibold text-gray-900">Your me.md</h2>
           <p className="text-sm text-gray-600 mt-1">
             Hand-written. The chat coach reads this before every reply, and you can copy or
             download it to paste into any other LLM as context.
@@ -383,6 +452,17 @@ const Me = () => {
           </button>
         </div>
       </div>
+      </>
+      )}
+
+      {/* Embedded domain pages — each one renders its existing CRUD UI as the
+          tab body. Their own page-level wrappers add a bit of extra padding
+          inside this container, which is fine for v1. */}
+      {tab === 'goals'    && <Goals />}
+      {tab === 'identity' && <Identity />}
+      {tab === 'beliefs'  && <Beliefs />}
+      {tab === 'triggers' && <Triggers />}
+      {tab === 'dating'   && <Dating />}
 
       {/* Suggestions modal */}
       {showSuggestions && (

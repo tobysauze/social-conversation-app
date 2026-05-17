@@ -14,14 +14,11 @@ import {
   Laugh,
   Heart,
   Brain,
-  Target as TargetIcon,
   Dna,
   Bot,
-  AlertTriangle,
   MoreHorizontal,
   ChevronDown,
   ClipboardList,
-  HeartHandshake,
   Moon,
   Sun,
   Database,
@@ -43,14 +40,10 @@ const Navbar = () => {
     { name: 'Wellness', href: '/wellness', icon: Heart },
     { name: 'Protocols', href: '/protocols', icon: ClipboardList },
     { name: 'AI Chat', href: '/chat', icon: Bot },
-    { name: 'Triggers', href: '/triggers', icon: AlertTriangle },
-    { name: 'Beliefs', href: '/beliefs', icon: BookOpen },
-    { name: 'Goals', href: '/goals', icon: TargetIcon },
-    { name: 'Identity', href: '/identity', icon: User },
+    // Triggers / Beliefs / Goals / Identity / Dating are tabs inside /me now.
     { name: 'People', href: '/people', icon: Users },
     { name: 'Dream Diary', href: '/dreams', icon: Moon },
     { name: 'Coach', href: '/coach', icon: Brain },
-    { name: 'Dating', href: '/dating', icon: HeartHandshake },
     { name: 'Stories', href: '/stories', icon: MessageSquare },
     { name: 'Practice', href: '/practice', icon: Play },
     { name: 'Jokes', href: '/jokes', icon: Laugh },
@@ -61,12 +54,12 @@ const Navbar = () => {
   ];
 
   const primaryNav = useMemo(() => {
-    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
+    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat']);
     return navigation.filter((i) => primary.has(i.name));
   }, [navigation]);
 
   const moreNav = useMemo(() => {
-    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat', 'Triggers', 'Beliefs']);
+    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat']);
     return navigation.filter((i) => !primary.has(i.name));
   }, [navigation]);
 
