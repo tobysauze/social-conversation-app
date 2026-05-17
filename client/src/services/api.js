@@ -293,6 +293,10 @@ export const meAPI = {
   getProfile: () => api.get('/me/profile'),
   saveProfile: (content) => api.put('/me/profile', { content }),
   extractSuggestions: () => api.post('/me/extract'),
+  // Server-rendered markdown. By default includes Profile + Goals + Identity
+  // + Beliefs + Triggers + Dating. Pass profileOnly=true for the slim file.
+  getMarkdown: ({ profileOnly = false } = {}) =>
+    api.get(`/me/markdown${profileOnly ? '?profileOnly=1' : ''}`, { responseType: 'text', transformResponse: (x) => x }),
   downloadUrl: () => `${API_BASE_URL}/me/markdown`
 };
 

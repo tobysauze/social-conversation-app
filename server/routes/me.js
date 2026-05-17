@@ -75,17 +75,207 @@ router.put('/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Markdown download view — adds a "Last updated" footer so the file you hand
-// to another LLM carries its own timestamp.
+// --- Combined me.md renderer ----------------------------------------------
+//
+// The exported me.md bundles the hand-written profile with structured data
+// from the goals/identity/beliefs/triggers/dating tables, so what you paste
+// into another LLM is a complete picture of who the user is right now.
+//
+// Sections only render when they have data — no empty headings.
+
+function fmtDate(d) {
+  if (!d) return null;
+  try { return new Date(d).toISOString().slice(0, 10); } catch (_) { return null; }
+}
+
+function bullet(s) { return `- ${s}`; }
+
+function renderGoalsSection(goals) {
+  if (!goals?.length) return null;
+  const active = goals.filter((g) => g.status === 'active');
+  const other = goals.filter((g) => g.status !== 'active');
+  const blocks = ['## Goals'];
+
+  const renderGoal = (g) => {
+    const meta = [];
+    if (g.area) meta.push(g.area);
+    if (g.targetDate) meta.push(`by ${fmtDate(g.targetDate)}`);
+    const metaSuffix = meta.length ? ` _(${meta.join(', ')})_` : '';
+    const desc = g.description ? `\n  ${g.description.replace(/\n+/g, ' ')}` : '';
+    return `- **${g.title}**${metaSuffix}${desc}`;
+  };
+
+  if (active.length) {
+    blocks.push('');
+    blocks.push('### Active');
+    blocks.push(...active.map(renderGoal));
+  }
+  if (other.length) {
+    blocks.push('');
+    blocks.push('### Other');
+    blocks.push(...other.map(renderGoal));
+  }
+  return blocks.join('\n');
+}
+
+function renderIdentitySection(v) {
+  if (!v) return null;
+  const parts = ['## Identity'];
+  if (v.vision) {
+    parts.push('');
+    parts.push('**Vision**');
+    parts.push(v.vision);
+  }
+  for (const [field, label] of [
+    ['values', 'Values'],
+    ['principles', 'Principles'],
+    ['traits', 'Traits'],
+    ['visionPoints', 'Vision points']
+  ]) {
+    const arr = safeJsonArr(v[field]);
+    if (arr.length) {
+      parts.push('');
+      parts.push(`**${label}**`);
+      parts.push(...arr.map(bullet));
+    }
+  }
+  return parts.length > 1 ? parts.join('\n') : null;
+}
+
+function renderBeliefsSection(beliefs) {
+  if (!beliefs?.length) return null;
+  const parts = ["## Beliefs I'm working on"];
+  for (const b of beliefs) {
+    parts.push('');
+    parts.push(`- **Current:** "${b.currentBelief}"`);
+    parts.push(`  **Desired:** "${b.desiredBelief}"`);
+    if (b.changePlan) parts.push(`  **Plan:** ${b.changePlan.replace(/\n+/g, ' ')}`);
+  }
+  return parts.join('\n');
+}
+
+function renderTriggersSection(triggers) {
+  if (!triggers?.length) return null;
+  const parts = ['## Anxiety triggers'];
+  for (const t of triggers) {
+    const meta = [];
+    if (t.category) meta.push(t.category);
+    if (t.intensity != null) meta.push(`intensity ${t.intensity}/10`);
+    const metaSuffix = meta.length ? ` _(${meta.join(', ')})_` : '';
+    const notes = t.notes ? `\n  ${t.notes.replace(/\n+/g, ' ')}` : '';
+    parts.push(`- **${t.title}**${metaSuffix}${notes}`);
+  }
+  return parts.join('\n');
+}
+
+function renderRequirements(label, req) {
+  if (!req) return null;
+  const lines = [];
+  if (req.partner_vision) {
+    lines.push(`**${label} — partner vision**`);
+    lines.push(req.partner_vision);
+  }
+  const groups = [
+    ['Must haves', req.must_haves],
+    ['Nice to haves', req.nice_to_haves],
+    ['Red flags', req.red_flags],
+    ['Shared interests', req.interests]
+  ];
+  for (const [name, arr] of groups) {
+    if (Array.isArray(arr) && arr.length) {
+      if (lines.length) lines.push('');
+      lines.push(`**${label} — ${name.toLowerCase()}**`);
+      lines.push(...arr.filter(Boolean).map(bullet));
+    }
+  }
+  return lines.length ? lines.join('\n') : null;
+}
+
+function renderDatingSection(dating) {
+  if (!dating) return null;
+  const parts = ['## Dating'];
+  const short = renderRequirements('Short-term', dating.shortTerm);
+  const long  = renderRequirements('Long-term',  dating.longTerm);
+  if (short) { parts.push(''); parts.push(short); }
+  if (long)  { parts.push(''); parts.push(long); }
+  const reflection = dating.selfReflectionAnswers;
+  if (reflection && typeof reflection === 'object') {
+    const entries = Object.entries(reflection).filter(([, v]) => v && String(v).trim());
+    if (entries.length) {
+      parts.push('');
+      parts.push('**Self-reflection**');
+      for (const [q, a] of entries) {
+        parts.push(`- _${q.replace(/_/g, ' ')}:_ ${String(a).trim()}`);
+      }
+    }
+  }
+  return parts.length > 1 ? parts.join('\n') : null;
+}
+
+async function loadStructuredForUser(userId) {
+  const [goals, identity, beliefs, triggers, datingRow] = await Promise.all([
+    prisma.goal.findMany({ where: { userId }, orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }] }),
+    prisma.identityVision.findUnique({ where: { userId } }).catch(() => null),
+    prisma.belief.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } }),
+    prisma.anxietyTrigger.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } }),
+    prisma.datingProfile.findUnique({ where: { userId } }).catch(() => null)
+  ]);
+
+  // Reuse the dating route's parse shape — JSON in DB, objects out.
+  const parseJson = (v) => {
+    if (!v) return null;
+    if (typeof v === 'object') return v;
+    try { return JSON.parse(v); } catch (_) { return null; }
+  };
+
+  const dating = datingRow
+    ? {
+        shortTerm: parseJson(datingRow.shortTermRequirements),
+        longTerm: parseJson(datingRow.longTermRequirements),
+        selfReflectionAnswers: parseJson(datingRow.selfReflectionAnswers)
+      }
+    : null;
+
+  return { goals, identity, beliefs, triggers, dating };
+}
+
+// Markdown download view — combined by default. ?profileOnly=1 returns just
+// the hand-written content (the slim version) for when the user only wants
+// to paste their narrative profile somewhere.
 router.get('/markdown', authenticateToken, async (req, res) => {
+  const profileOnly = req.query.profileOnly === '1' || req.query.profileOnly === 'true';
   try {
     const { content, updatedAt } = await loadProfile(req.user.userId);
     const footer = updatedAt
       ? `\n\n_Last updated: ${new Date(updatedAt).toISOString().slice(0, 10)}_\n`
       : '';
-    const markdown = (content || '').trimEnd() + footer;
+
+    let markdown = (content || '').trimEnd();
+
+    if (!profileOnly) {
+      const data = await loadStructuredForUser(req.user.userId);
+      const sections = [
+        renderGoalsSection(data.goals),
+        renderIdentitySection(data.identity),
+        renderBeliefsSection(data.beliefs),
+        renderTriggersSection(data.triggers),
+        renderDatingSection(data.dating)
+      ].filter(Boolean);
+
+      if (sections.length) {
+        const divider = markdown ? '\n\n---\n\n' : '';
+        markdown = markdown + divider + sections.join('\n\n');
+      }
+    }
+
+    markdown = markdown + footer;
+
+    // Browsers calling this via fetch+blob URL ignore Content-Disposition.
+    // We still set it so a direct-link download (if ever used) gets a nice
+    // filename out of the box.
+    const filename = profileOnly ? 'me-profile.md' : 'me.md';
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="me.md"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(markdown);
   } catch (e) {
     console.error('me markdown error:', e);

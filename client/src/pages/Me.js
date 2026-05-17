@@ -247,26 +247,67 @@ const Me = () => {
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
+  // If the user has unsaved edits in the textarea, ask whether to save first
+  // or proceed with the last saved version. Returns true if export should
+  // proceed, false if the user cancelled.
+  const ensureFreshForExport = async () => {
+    if (!dirty) return true;
+    const choice = window.confirm(
+      "You have unsaved Profile edits.\n\nOK = save now and include them.\nCancel = export the last saved version (your unsaved edits won't be in the file)."
+    );
+    if (choice) {
+      try {
+        await handleSave();
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    // User chose to proceed without saving — that's fine, the saved version
+    // is what the server will render.
+    return true;
+  };
+
+  // Fetch the server-rendered markdown. By default this is the combined file
+  // (profile + goals + identity + beliefs + triggers + dating). Pass
+  // { profileOnly: true } to get just the hand-written narrative.
+  const fetchMarkdown = async ({ profileOnly = false } = {}) => {
+    const res = await meAPI.getMarkdown({ profileOnly });
+    return typeof res.data === 'string' ? res.data : '';
+  };
+
+  const triggerDownload = (text, filename) => {
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleCopy = async () => {
+    if (!(await ensureFreshForExport())) return;
     try {
-      const text = content + (updatedAt ? `\n\n_Last updated: ${new Date(updatedAt).toISOString().slice(0, 10)}_\n` : '');
+      const text = await fetchMarkdown();
       await navigator.clipboard.writeText(text);
       setCopied(true);
       toast.success('Copied — paste into any LLM');
       setTimeout(() => setCopied(false), 2000);
-    } catch (_) {
+    } catch (e) {
+      console.error(e);
       toast.error('Copy failed');
     }
   };
 
-  const handleDownload = () => {
-    const text = content + (updatedAt ? `\n\n_Last updated: ${new Date(updatedAt).toISOString().slice(0, 10)}_\n` : '');
-    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'me.md';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const handleDownload = async ({ profileOnly = false } = {}) => {
+    if (!(await ensureFreshForExport())) return;
+    try {
+      const text = await fetchMarkdown({ profileOnly });
+      triggerDownload(text, profileOnly ? 'me-profile.md' : 'me.md');
+    } catch (e) {
+      console.error(e);
+      toast.error('Download failed');
+    }
   };
 
   const handleExtract = async () => {
@@ -342,8 +383,8 @@ const Me = () => {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Your me.md</h2>
           <p className="text-sm text-gray-600 mt-1">
-            Hand-written. The chat coach reads this before every reply, and you can copy or
-            download it to paste into any other LLM as context.
+            Hand-written narrative below. The Copy and me.md buttons return the <strong>combined</strong>
+            file: your profile plus Goals, Identity, Beliefs, Triggers and Dating from the other tabs.
           </p>
         </div>
 
@@ -359,8 +400,9 @@ const Me = () => {
           </button>
           <button
             type="button"
-            onClick={handleDownload}
+            onClick={() => handleDownload()}
             className="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            title="Profile + Goals + Identity + Beliefs + Triggers + Dating, in one file"
           >
             <Download className="w-4 h-4 mr-1.5" />
             me.md
@@ -432,13 +474,23 @@ const Me = () => {
       </div>
 
       <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
-        <button
-          type="button"
-          onClick={handleInsertTemplate}
-          className="text-xs text-indigo-600 hover:text-indigo-800"
-        >
-          Insert template
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={handleInsertTemplate}
+            className="text-xs text-indigo-600 hover:text-indigo-800"
+          >
+            Insert template
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDownload({ profileOnly: true })}
+            className="text-xs text-gray-500 hover:text-gray-700"
+            title="Download just the hand-written narrative, without Goals/Identity/Beliefs/Triggers/Dating"
+          >
+            Download Profile only
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
           <button
