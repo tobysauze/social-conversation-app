@@ -202,15 +202,21 @@ const Me = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
+    // Safety net: even if /api/me/profile hangs (Render cold-start, CORS
+    // preflight stall, etc.) unblock the textarea after 6s so the user can
+    // still type. If the request eventually resolves, content gets populated
+    // then; if not, the user can start typing into the empty editor.
+    const safetyTimer = setTimeout(() => setLoading(false), 6000);
     try {
       const res = await meAPI.getProfile();
       setContent(res.data.content || '');
       setOriginalContent(res.data.content || '');
       setUpdatedAt(res.data.updatedAt || null);
     } catch (e) {
-      console.error(e);
-      toast.error('Failed to load profile');
+      console.error('[me] profile load failed:', e?.response?.status, e?.message);
+      toast.error('Failed to load profile — you can still write below');
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   }, []);
@@ -447,18 +453,23 @@ const Me = () => {
       {/* Editor / preview */}
       <div className={`grid gap-4 ${view === 'split' ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
         {(view === 'edit' || view === 'split') && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {loading ? (
-              <div className="h-[60vh] animate-pulse bg-gray-50" />
-            ) : (
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={`Empty for now. Tap "Insert template" below to start with section headers, or write freely.`}
-                className="w-full h-[60vh] p-4 font-mono text-sm text-gray-900 bg-white rounded-lg focus:outline-none resize-none"
-                spellCheck
-              />
+          <div className="bg-white rounded-lg shadow-sm border-2 border-gray-300 focus-within:border-indigo-400 transition-colors relative">
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              disabled={loading}
+              placeholder={loading
+                ? 'Loading…'
+                : `Click here and start writing, or tap "Insert template" below for a starter scaffold.`}
+              className="w-full h-[60vh] p-4 font-mono text-sm text-gray-900 placeholder-gray-400 bg-white rounded-lg focus:outline-none resize-none disabled:opacity-60 disabled:cursor-wait"
+              spellCheck
+            />
+            {loading && (
+              <div className="absolute top-2 right-3 text-xs text-gray-400 inline-flex items-center pointer-events-none">
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                Loading
+              </div>
             )}
           </div>
         )}
