@@ -16,8 +16,7 @@ import {
   Target as TargetIcon,
   BookOpen,
   AlertTriangle,
-  HeartHandshake,
-  User
+  HeartHandshake
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -33,7 +32,7 @@ import Dating from './Dating';
 const TABS = [
   { key: 'profile',  label: 'Profile',  icon: UserIcon,      hint: 'me.md — your hand-written self-summary' },
   { key: 'goals',    label: 'Goals',    icon: TargetIcon,    hint: 'What you\'re actively working toward' },
-  { key: 'identity', label: 'Identity', icon: User,          hint: 'Vision, values, principles, traits' },
+  { key: 'identity', label: 'Identity', icon: UserIcon,      hint: 'Vision, values, principles, traits' },
   { key: 'beliefs',  label: 'Beliefs',  icon: BookOpen,      hint: 'Current beliefs you want to shift' },
   { key: 'triggers', label: 'Triggers', icon: AlertTriangle, hint: 'Things that pull you off-balance' },
   { key: 'dating',   label: 'Dating',   icon: HeartHandshake, hint: 'What you\'re looking for / self-reflection' }
