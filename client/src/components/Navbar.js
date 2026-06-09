@@ -22,7 +22,8 @@ import {
   Moon,
   Sun,
   Database,
-  Sparkles
+  Sparkles,
+  Feather
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -36,6 +37,7 @@ const Navbar = () => {
     { name: 'Home', href: '/', icon: Home },
     { name: 'Briefing', href: '/briefing', icon: Sun },
     { name: 'Me', href: '/me', icon: User },
+    { name: 'Soul', href: '/soul', icon: Feather },
     { name: 'Journal', href: '/journal', icon: BookOpen },
     { name: 'Wellness', href: '/wellness', icon: Heart },
     { name: 'Protocols', href: '/protocols', icon: ClipboardList },
@@ -54,12 +56,12 @@ const Navbar = () => {
   ];
 
   const primaryNav = useMemo(() => {
-    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat']);
+    const primary = new Set(['Home', 'Briefing', 'Me', 'Soul', 'Journal', 'Wellness', 'Protocols', 'AI Chat']);
     return navigation.filter((i) => primary.has(i.name));
   }, [navigation]);
 
   const moreNav = useMemo(() => {
-    const primary = new Set(['Home', 'Briefing', 'Me', 'Journal', 'Wellness', 'Protocols', 'AI Chat']);
+    const primary = new Set(['Home', 'Briefing', 'Me', 'Soul', 'Journal', 'Wellness', 'Protocols', 'AI Chat']);
     return navigation.filter((i) => !primary.has(i.name));
   }, [navigation]);
 

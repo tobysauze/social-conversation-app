@@ -23,6 +23,7 @@ import Protocols from './pages/Protocols';
 import Briefing from './pages/Briefing';
 import Memory from './pages/Memory';
 import Me from './pages/Me';
+import Soul from './pages/Soul';
 import HealthSync from './pages/HealthSync';
 import Games from './pages/Games';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -212,6 +213,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Me />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/soul"
+            element={
+              <ProtectedRoute>
+                <Soul />
               </ProtectedRoute>
             }
           />

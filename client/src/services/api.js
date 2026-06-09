@@ -300,6 +300,14 @@ export const meAPI = {
   downloadUrl: () => `${API_BASE_URL}/me/markdown`
 };
 
+// "Soul" — a single per-user markdown blob the user reads daily as a
+// reminder of how they want to live, focus, and be. Same shape as meAPI:
+// one row per user, raw markdown.
+export const soulAPI = {
+  get: () => api.get('/soul'),
+  save: (content) => api.put('/soul', { content })
+};
+
 // Health Sync (Apple Health / Shortcuts ingest) API
 export const ingestAPI = {
   getInfo: () => api.get('/ingest/info')
