@@ -13,8 +13,14 @@ async function createTobyUser() {
     }
 
     // Create Toby user
+    const password = process.env.TOBY_PASSWORD;
+    if (!password) {
+      console.error('Set the TOBY_PASSWORD environment variable before running this script.');
+      process.exit(1);
+    }
+
     const saltRounds = 12;
-    const passwordHash = await bcrypt.hash('Amazon12308', saltRounds);
+    const passwordHash = await bcrypt.hash(password, saltRounds);
 
     const info = db
       .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
@@ -22,7 +28,6 @@ async function createTobyUser() {
 
     console.log('Toby user created successfully with ID:', info.lastInsertRowid);
     console.log('Username: Toby');
-    console.log('Password: Amazon12308');
   } catch (error) {
     console.error('Error in createTobyUser:', error);
   }

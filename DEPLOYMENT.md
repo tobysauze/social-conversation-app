@@ -114,8 +114,12 @@ Once deployed, you can access your app from any device at:
 
 ## 🔑 Login Credentials
 
-- **Username**: `Toby`
-- **Password**: `Amazon12308`
+Create your user with the seed script and set the password via the `TOBY_PASSWORD`
+environment variable (it is never committed). For example:
+
+```bash
+TOBY_PASSWORD='your-strong-password' node server/create-toby-user.js
+```
 
 ## 🛠️ Troubleshooting
 
