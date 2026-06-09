@@ -82,7 +82,7 @@ async function buildSignals(userId) {
     wellness = await prisma.$queryRawUnsafe(
       `SELECT date, sleep_score, sleep_quality, exercise_minutes, exercise_intensity, diet_quality
          FROM wellness_entries
-        WHERE user_id=$1 AND date >= $2
+        WHERE user_id=$1 AND date >= $2::date
         ORDER BY date DESC
         LIMIT 14`,
       userId,
@@ -192,7 +192,7 @@ router.get('/today', authenticateToken, async (req, res) => {
   try {
     if (!force) {
       const cached = await prisma.$queryRawUnsafe(
-        `SELECT briefing_json, created_at, updated_at FROM daily_briefings WHERE user_id=$1 AND date=$2`,
+        `SELECT briefing_json, created_at, updated_at FROM daily_briefings WHERE user_id=$1 AND date=$2::date`,
         userId,
         date
       );
@@ -211,7 +211,7 @@ router.get('/today', authenticateToken, async (req, res) => {
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO daily_briefings (user_id, date, briefing_json, signals_json, model, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+         VALUES ($1, $2::date, $3, $4, $5, NOW(), NOW())
        ON CONFLICT (user_id, date) DO UPDATE SET
          briefing_json = EXCLUDED.briefing_json,
          signals_json  = EXCLUDED.signals_json,

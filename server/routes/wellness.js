@@ -90,7 +90,7 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const rows = start && end
       ? await prisma.$queryRawUnsafe(
-          `SELECT * FROM wellness_entries WHERE user_id=$1 AND date BETWEEN $2 AND $3 ORDER BY date DESC`,
+          `SELECT * FROM wellness_entries WHERE user_id=$1 AND date BETWEEN $2::date AND $3::date ORDER BY date DESC`,
           req.user.userId,
           start,
           end
@@ -127,7 +127,7 @@ router.post('/', authenticateToken, async (req, res) => {
   if (!date) return res.status(400).json({ error: 'date is required' });
   try {
     const existing = await prisma.$queryRawUnsafe(
-      `SELECT id FROM wellness_entries WHERE user_id=$1 AND date=$2`,
+      `SELECT id FROM wellness_entries WHERE user_id=$1 AND date=$2::date`,
       req.user.userId,
       date
     );
@@ -151,7 +151,7 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.json({ message: 'Updated' });
     }
     await prisma.$executeRawUnsafe(
-      `INSERT INTO wellness_entries (user_id, date, supplements, medication, diet_items, diet_quality, exercise_minutes, exercise_intensity, sleep_quality, sleep_score, weight_kg, height_cm, bmi, body_fat_percent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      `INSERT INTO wellness_entries (user_id, date, supplements, medication, diet_items, diet_quality, exercise_minutes, exercise_intensity, sleep_quality, sleep_score, weight_kg, height_cm, bmi, body_fat_percent) VALUES ($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       req.user.userId,
       date,
       JSON.stringify(supplements),

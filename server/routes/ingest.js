@@ -46,7 +46,7 @@ router.post('/apple-health', async (req, res) => {
 
       if (userId && date) {
         const existing = await prisma.$queryRawUnsafe(
-          `SELECT id FROM wellness_entries WHERE user_id=$1 AND date=$2`,
+          `SELECT id FROM wellness_entries WHERE user_id=$1 AND date=$2::date`,
           Number(userId),
           date
         );
@@ -61,7 +61,7 @@ router.post('/apple-health', async (req, res) => {
           );
         } else {
           await prisma.$executeRawUnsafe(
-            `INSERT INTO wellness_entries (user_id, date, exercise_minutes, exercise_intensity, sleep_quality, sleep_score) VALUES ($1,$2,$3,$4,$5,$6)`,
+            `INSERT INTO wellness_entries (user_id, date, exercise_minutes, exercise_intensity, sleep_quality, sleep_score) VALUES ($1,$2::date,$3,$4,$5,$6)`,
             Number(userId),
             date,
             exerciseMinutes ?? 0,
